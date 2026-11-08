@@ -393,7 +393,7 @@ def create_order(req: OrderCreateRequest):
             """, (order_id, it["product_id"], it["variant_id"], it["name"], it["weight_label"], it["unit_price"], it["quantity"], it["total_price"]))
 
         # Notification & WhatsApp Simulation
-        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: http://localhost:8000/?track={order_number}\n\nQuestions? WhatsApp us at +91 98401 22334."
+        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: http://localhost:8000/?track={order_number}\n\nQuestions? WhatsApp us at +91 99407 65140."
         cursor.execute("""
         INSERT INTO notifications (user_type, recipient_phone, recipient_email, notification_type, channel, title, message, status)
         VALUES ('Customer', ?, ?, 'Order Confirmation', 'WhatsApp', ?, ?, 'Delivered')

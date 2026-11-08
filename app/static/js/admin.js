@@ -1,7 +1,7 @@
 // DJ Microgreens Enterprise Farm & Business Management Dashboard
 
 let activeAdminTab = 'overview';
-let currentAdminRole = 'Super Admin';
+let currentUser = null;
 let ordersData = [];
 let batchesData = [];
 let inventoryData = [];
@@ -13,17 +13,191 @@ let financeData = null;
 let dailySalesChartInstance = null;
 let productSalesChartInstance = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadAdminStats();
-  loadAdminOrders();
-  loadCultivationBatches();
-  loadInventory();
-  loadCrmCustomers();
-  loadB2bData();
-  loadDeliveryFleet();
-  loadFinanceOverview();
+// Send people back to the login page when their session ends
+const _origFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await _origFetch(...args);
+  if (res.status === 401 && !String(args[0]).startsWith('/api/auth/login')) {
+    window.location.href = '/login';
+  }
+  return res;
+};
+
+function canSee(tab) {
+  return !!currentUser && currentUser.tabs.includes(tab);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) return;
+    currentUser = await res.json();
+  } catch (err) {
+    window.location.href = '/login';
+    return;
+  }
+
+  applyUserToPage();
+
+  if (canSee('overview')) loadAdminStats();
+  if (canSee('orders')) loadAdminOrders();
+  if (canSee('production')) loadCultivationBatches();
+  if (canSee('inventory')) loadInventory();
+  if (canSee('crm')) loadCrmCustomers();
+  if (canSee('b2b')) loadB2bData();
+  if (canSee('delivery')) loadDeliveryFleet();
+  if (canSee('finance')) loadFinanceOverview();
   initSowingDates();
 });
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('userMenu');
+  const btn = document.getElementById('userMenuBtn');
+  if (menu && !menu.contains(e.target) && !btn.contains(e.target)) menu.classList.add('hidden');
+});
+
+// ----------------- SIGNED-IN USER & ACCOUNT -----------------
+function displayName(u) {
+  return u.full_name ? u.full_name : u.role;
+}
+
+function applyUserToPage() {
+  document.getElementById('currentUserName').textContent = displayName(currentUser);
+  document.getElementById('currentUserRole').textContent = currentUser.full_name ? currentUser.role : `@${currentUser.username}`;
+  document.getElementById('defaultPasswordBanner').classList.toggle('hidden', !currentUser.must_change_password);
+  document.getElementById('manageStaffMenuItem').classList.toggle('hidden', currentUser.role !== 'Super Admin');
+
+  // Only show the tabs this role may open
+  document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+    btn.classList.toggle('hidden', !canSee(btn.dataset.tab));
+  });
+  const firstTab = canSee(activeAdminTab) ? activeAdminTab : currentUser.tabs[0];
+  if (firstTab) switchAdminTab(firstTab);
+}
+
+function toggleUserMenu() {
+  document.getElementById('userMenu').classList.toggle('hidden');
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+
+function showFormMsg(el, text, ok) {
+  el.textContent = text;
+  el.className = `font-semibold rounded-xl px-3 py-2 ${ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`;
+}
+
+function openAccountModal() {
+  document.getElementById('userMenu').classList.add('hidden');
+  document.getElementById('accountRoleLabel').textContent = currentUser.role;
+  document.getElementById('accFullName').value = currentUser.full_name || '';
+  document.getElementById('accUsername').value = currentUser.username;
+  ['accNewPassword', 'accConfirmPassword', 'accCurrentPassword'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('accountMsg').classList.add('hidden');
+  document.getElementById('accountModal').classList.remove('hidden');
+}
+
+function closeAccountModal() {
+  document.getElementById('accountModal').classList.add('hidden');
+}
+
+async function submitAccountChanges(event) {
+  event.preventDefault();
+  const msg = document.getElementById('accountMsg');
+  const newPw = document.getElementById('accNewPassword').value;
+  if (newPw !== document.getElementById('accConfirmPassword').value) {
+    showFormMsg(msg, 'The two new passwords do not match.', false);
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/change-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_password: document.getElementById('accCurrentPassword').value,
+        new_username: document.getElementById('accUsername').value,
+        new_password: newPw || null,
+        full_name: document.getElementById('accFullName').value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not save changes');
+    currentUser = data.user;
+    applyUserToPage();
+    showFormMsg(msg, 'Saved. Use your new username and password next time you sign in.', true);
+    setTimeout(closeAccountModal, 1500);
+  } catch (err) {
+    showFormMsg(msg, err.message, false);
+  }
+}
+
+async function openStaffModal() {
+  document.getElementById('userMenu').classList.add('hidden');
+  document.getElementById('staffModal').classList.remove('hidden');
+  await renderStaffList();
+}
+
+function closeStaffModal() {
+  document.getElementById('staffModal').classList.add('hidden');
+}
+
+function escapeAttr(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+async function renderStaffList() {
+  const list = document.getElementById('staffList');
+  const res = await fetch('/api/auth/users');
+  const users = await res.json();
+  list.innerHTML = users.map(u => `
+    <form onsubmit="saveStaffMember(event, ${u.id})" class="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="font-bold text-slate-900">${u.role}</span>
+        ${u.must_change_password ? '<span class="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Default / temporary password</span>' : ''}
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <input name="full_name" value="${escapeAttr(u.full_name)}" placeholder="Name" class="bg-white border border-slate-200 rounded-xl px-3 py-2">
+        <input name="username" value="${escapeAttr(u.username)}" required placeholder="Username" class="bg-white border border-slate-200 rounded-xl px-3 py-2">
+        <input name="new_password" type="password" minlength="6" autocomplete="new-password" placeholder="New password (optional)" class="bg-white border border-slate-200 rounded-xl px-3 py-2">
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="staff-msg text-[11px] font-semibold"></span>
+        <button type="submit" class="bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold px-3 py-1.5 rounded-xl">Save</button>
+      </div>
+    </form>
+  `).join('');
+}
+
+async function saveStaffMember(event, userId) {
+  event.preventDefault();
+  const form = event.target;
+  const msg = form.querySelector('.staff-msg');
+  try {
+    const res = await fetch(`/api/auth/users/${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: form.full_name.value,
+        username: form.username.value,
+        new_password: form.new_password.value || null
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not save');
+    if (userId === currentUser.id) {
+      const me = await fetch('/api/auth/me');
+      if (me.ok) { currentUser = await me.json(); applyUserToPage(); }
+    }
+    msg.className = 'staff-msg text-[11px] font-semibold text-emerald-700';
+    msg.textContent = form.new_password.value ? 'Saved. They will be asked to change this password.' : 'Saved.';
+    form.new_password.value = '';
+  } catch (err) {
+    msg.className = 'staff-msg text-[11px] font-semibold text-rose-700';
+    msg.textContent = err.message;
+  }
+}
 
 function initSowingDates() {
   const today = new Date();
@@ -63,11 +237,6 @@ function switchAdminTab(tabId) {
   });
 
   lucide.createIcons();
-}
-
-function switchAdminRole(role) {
-  currentAdminRole = role;
-  alert(`Switched active view to: ${role}`);
 }
 
 // ----------------- 1. DASHBOARD KPIS & CHARTS -----------------
@@ -341,7 +510,7 @@ async function submitOrderStatusUpdate() {
     if (data.success) {
       closeStatusModal();
       loadAdminOrders();
-      loadAdminStats();
+      if (canSee('overview')) loadAdminStats();
     }
   } catch (err) {
     alert('Error updating order status.');
@@ -440,8 +609,8 @@ async function handleCreateSowing(event) {
       alert(`Batch ${data.batch_code} initiated! Inventory auto-updated.`);
       closeSowingModal();
       loadCultivationBatches();
-      loadInventory();
-      loadAdminStats();
+      if (canSee('inventory')) loadInventory();
+      if (canSee('overview')) loadAdminStats();
     }
   } catch (err) {
     alert('Error creating batch.');
@@ -460,7 +629,7 @@ async function recordBatchHarvest(batchId, code, variety, expYield) {
     harvest_date: new Date().toISOString().split('T')[0],
     yield_grams: actualYield,
     wastage_grams: wastage,
-    operator_name: "Muthukumar R.",
+    operator_name: displayName(currentUser),
     moisture_content: "Optimal (78%)",
     packaged_50g: 5,
     packaged_100g: 10,
@@ -477,7 +646,7 @@ async function recordBatchHarvest(batchId, code, variety, expYield) {
     const data = await res.json();
     alert(data.message);
     loadCultivationBatches();
-    loadAdminStats();
+    if (canSee('overview')) loadAdminStats();
   } catch (err) {
     alert('Error recording harvest.');
   }
@@ -534,7 +703,7 @@ async function quickStockAdd(itemId, name, unit) {
     });
     const data = await res.json();
     alert(data.message);
-    loadInventory();
+    if (canSee('inventory')) loadInventory();
   } catch (err) {
     alert('Error restocking.');
   }

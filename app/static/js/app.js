@@ -569,7 +569,7 @@ async function handlePlaceOrder(event) {
 
       // WhatsApp direct share link
       const encodedMsg = encodeURIComponent(data.whatsapp_message);
-      document.getElementById('successWhatsAppLink').href = `https://wa.me/919840122334?text=${encodedMsg}`;
+      document.getElementById('successWhatsAppLink').href = `https://wa.me/919940765140?text=${encodedMsg}`;
 
       document.getElementById('orderSuccessModal').classList.remove('hidden');
     } else {
