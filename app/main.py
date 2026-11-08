@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.database import init_db, get_db
+from app.database import init_db, get_db, USE_TURSO
 from app.seed_data import seed_database
 from app.auth import (
     SESSION_COOKIE,
@@ -118,5 +118,6 @@ def health_check():
         "status": "healthy",
         "app": "DJ Microgreens",
         "city": "Chennai, Tamil Nadu",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "database": "turso" if USE_TURSO else "local-file"
     }
