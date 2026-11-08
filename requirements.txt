@@ -5,3 +5,4 @@ python-multipart>=0.0.12
 openpyxl>=3.1.5
 reportlab>=4.2.0
 pillow>=10.0.0
+libsql==0.1.11
