@@ -13,8 +13,24 @@ SESSION_COOKIE = "dj_session"
 SESSION_MAX_AGE = 60 * 60 * 12  # 12 hours
 IS_SECURE_COOKIE = bool(os.environ.get("VERCEL"))  # HTTPS-only cookie on Vercel
 
-# Set DJ_SECRET_KEY in Vercel (Project → Settings → Environment Variables) for production.
-SECRET_KEY = os.environ.get("DJ_SECRET_KEY", "dj-microgreens-change-this-secret-key")
+# Signing key for login cookies. DJ_SECRET_KEY overrides it; otherwise the app
+# creates a random key once and keeps it in the database.
+_secret_key = os.environ.get("DJ_SECRET_KEY")
+
+
+def get_secret_key() -> str:
+    global _secret_key
+    if _secret_key:
+        return _secret_key
+    with get_db() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES ('session_secret', ?)",
+            (secrets.token_hex(32),),
+        )
+        row = conn.execute("SELECT value FROM app_settings WHERE key = 'session_secret'").fetchone()
+    _secret_key = row["value"]
+    return _secret_key
 
 DEFAULT_PASSWORD = "DJmicro@2026"
 
@@ -73,7 +89,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 # ----------------- SESSIONS -----------------
 def _sign(payload: str) -> str:
-    return hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 def create_session_token(user_id: int, password_hash: str) -> str:
