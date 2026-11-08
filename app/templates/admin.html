@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Microgreens – Business & Farm Management Operating System</title>
+  
+  <link rel="icon" type="image/png" href="https://img.icons8.com/color/96/sprout.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            djgreen: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js for interactive analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- ADMIN TOPBAR -->
+  <header class="bg-djgreen-900 text-white sticky top-0 z-40 border-b border-djgreen-800 shadow-md">
+    <div class="px-4 sm:px-8 py-3 flex items-center justify-between">
+      
+      <!-- Brand & Admin Indicator -->
+      <div class="flex items-center space-x-3">
+        <a href="/" class="flex items-center space-x-2">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-300">
+            <i data-lucide="sprout" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-extrabold text-base tracking-wide">DJ MICROGREENS</span>
+              <span class="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Enterprise ERP</span>
+            </div>
+            <span class="text-[11px] text-emerald-300/80">Chennai Farm Operations & Logistics</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Quick Role Switcher & User Profile -->
+      <div class="flex items-center space-x-3 text-xs">
+        
+        <div class="hidden sm:flex items-center space-x-2 bg-emerald-950/60 border border-emerald-700/50 px-3 py-1.5 rounded-xl">
+          <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span class="text-slate-300">Active Role:</span>
+          <select id="adminRoleSelect" onchange="switchAdminRole(this.value)" class="bg-transparent text-emerald-200 font-bold focus:outline-none cursor-pointer">
+            <option value="Super Admin" class="bg-slate-900 text-white">Super Admin (Devanand J.)</option>
+            <option value="Operations Manager" class="bg-slate-900 text-white">Operations Manager (Priya S.)</option>
+            <option value="Farm Manager" class="bg-slate-900 text-white">Farm Manager (Muthukumar R.)</option>
+            <option value="Inventory Manager" class="bg-slate-900 text-white">Inventory Manager (Kavitha R.)</option>
+            <option value="Delivery Manager" class="bg-slate-900 text-white">Delivery Manager (Arun P.)</option>
+            <option value="Sales Manager" class="bg-slate-900 text-white">Sales & B2B Manager (Deepika V.)</option>
+          </select>
+        </div>
+
+        <a href="/" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition">
+          <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">View Storefront</span>
+        </a>
+
+      </div>
+
+    </div>
+
+    <!-- MODULE NAVIGATION TABS -->
+    <nav class="bg-djgreen-950 px-4 sm:px-8 flex items-center space-x-1 sm:space-x-2 overflow-x-auto border-t border-djgreen-900 text-xs font-semibold scrollbar-none">
+      <button onclick="switchAdminTab('overview')" class="admin-nav-btn active py-3 px-3 text-white border-b-2 border-emerald-400 flex items-center space-x-1.5" data-tab="overview">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Overview & KPIs</span>
+      </button>
+
+      <button onclick="switchAdminTab('orders')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="orders">
+        <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+        <span>Orders & Kanban</span>
+      </button>
+
+      <button onclick="switchAdminTab('production')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="production">
+        <i data-lucide="leaf" class="w-4 h-4"></i>
+        <span>Farm Production</span>
+      </button>
+
+      <button onclick="switchAdminTab('inventory')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="inventory">
+        <i data-lucide="boxes" class="w-4 h-4"></i>
+        <span>Inventory & Seeds</span>
+      </button>
+
+      <button onclick="switchAdminTab('crm')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="crm">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        <span>CRM & Customers</span>
+      </button>
+
+      <button onclick="switchAdminTab('b2b')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="b2b">
+        <i data-lucide="chef-hat" class="w-4 h-4"></i>
+        <span>Restaurant B2B</span>
+      </button>
+
+      <button onclick="switchAdminTab('delivery')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="delivery">
+        <i data-lucide="truck" class="w-4 h-4"></i>
+        <span>Delivery Fleet</span>
+      </button>
+
+      <button onclick="switchAdminTab('finance')" class="admin-nav-btn py-3 px-3 text-slate-300 hover:text-white border-b-2 border-transparent flex items-center space-x-1.5" data-tab="finance">
+        <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+        <span>Finance & Reports</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ADMIN BODY CONTENT -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- ==================== 1. OVERVIEW & KPIS ==================== -->
+    <section id="admin-sec-overview" class="admin-sec block space-y-6">
+      
+      <!-- Top Actions Bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Farm Performance & Operations Overview</h2>
+          <p class="text-xs text-slate-500">Live telemetry from Guindy indoor micro-farm & Chennai delivery routes.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <a href="/api/exports/orders/excel" class="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm transition">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+            <span>Export Orders (.xlsx)</span>
+          </a>
+          <button onclick="loadAdminStats()" class="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 14 REQUIRED KPI TILES -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
+        
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Orders Today</span>
+          <div id="statOrdersToday" class="text-2xl font-black text-slate-900">-</div>
+          <span class="text-[10px] text-emerald-600 font-bold">● Active Today</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Orders This Month</span>
+          <div id="statOrdersMonth" class="text-2xl font-black text-slate-900">-</div>
+          <span class="text-[10px] text-slate-500 font-medium">Chennai Area</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending Orders</span>
+          <div id="statPendingOrders" class="text-2xl font-black text-amber-600">-</div>
+          <span class="text-[10px] text-amber-600 font-semibold">Requires Action</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Confirmed Orders</span>
+          <div id="statConfirmedOrders" class="text-2xl font-black text-emerald-700">-</div>
+          <span class="text-[10px] text-emerald-600 font-semibold">Payment Confirmed</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">In Production</span>
+          <div id="statInProduction" class="text-2xl font-black text-sky-700">-</div>
+          <span class="text-[10px] text-sky-600 font-semibold">Under LED Growth</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ready for Harvest</span>
+          <div id="statReadyHarvest" class="text-2xl font-black text-djgreen-800">-</div>
+          <span class="text-[10px] text-emerald-700 font-semibold">Morning Canopy</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ready Dispatch</span>
+          <div id="statReadyDispatch" class="text-2xl font-black text-indigo-700">-</div>
+          <span class="text-[10px] text-indigo-600 font-semibold">Packed in Cold Bag</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Delivered Orders</span>
+          <div id="statDelivered" class="text-2xl font-black text-emerald-800">-</div>
+          <span class="text-[10px] text-emerald-600 font-semibold">Doorstep Completed</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cancelled Orders</span>
+          <div id="statCancelled" class="text-2xl font-black text-rose-600">-</div>
+          <span class="text-[10px] text-slate-400 font-medium">0.2% Low Rate</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Revenue</span>
+          <div id="statTotalRevenue" class="text-2xl font-black text-djgreen-900">-</div>
+          <span class="text-[10px] text-emerald-600 font-semibold">Realized In INR</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending Payments</span>
+          <div id="statPendingPayments" class="text-2xl font-black text-amber-700">-</div>
+          <span class="text-[10px] text-amber-600 font-semibold">B2B Net 15 / COD</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Customers</span>
+          <div id="statActiveCustomers" class="text-2xl font-black text-slate-900">-</div>
+          <span class="text-[10px] text-slate-500 font-medium">Chennai Registered</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Repeat Customers</span>
+          <div id="statRepeatCustomers" class="text-2xl font-black text-indigo-700">-</div>
+          <span class="text-[10px] text-indigo-600 font-bold">75% High Retention</span>
+        </div>
+
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monthly Sub MRR</span>
+          <div id="statSubMRR" class="text-2xl font-black text-djgreen-800">-</div>
+          <span class="text-[10px] text-emerald-600 font-bold">Recurring Auto</span>
+        </div>
+
+      </div>
+
+      <!-- INTERACTIVE CHARTS -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Daily Revenue Trend (7 Days) -->
+        <div class="lg:col-span-8 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-bold text-sm text-slate-900">Chennai Sales & Revenue Trajectory (7-Day)</h3>
+              <p class="text-xs text-slate-400">Daily realized sales volume in Indian Rupees (₹)</p>
+            </div>
+            <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-xl">Real-time DB Sync</span>
+          </div>
+          <div class="h-64 sm:h-72">
+            <canvas id="dailySalesChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Product Sales Breakdown & Status Donut -->
+        <div class="lg:col-span-4 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">Microgreens Popularity by Revenue</h3>
+            <p class="text-xs text-slate-400">Highest grossing varieties this month</p>
+          </div>
+          <div class="h-56">
+            <canvas id="productSalesChart"></canvas>
+          </div>
+          <div id="topProductLegend" class="text-xs space-y-1.5 pt-2 border-t border-slate-100">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ==================== 2. ORDER MANAGEMENT & KANBAN ==================== -->
+    <section id="admin-sec-orders" class="admin-sec hidden space-y-6">
+      
+      <!-- Top Controls -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Order Management & Fulfillment</h2>
+          <p class="text-xs text-slate-500">Track and advance customer orders across all 11 production and delivery stages.</p>
+        </div>
+
+        <!-- View Switcher (Table vs Kanban) -->
+        <div class="flex items-center space-x-2 bg-slate-200 p-1 rounded-xl text-xs font-bold">
+          <button id="viewToggleTable" onclick="toggleOrderView('table')" class="px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-900">Table View</button>
+          <button id="viewToggleKanban" onclick="toggleOrderView('kanban')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">Kanban Board</button>
+        </div>
+      </div>
+
+      <!-- Filters & Search Bar -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">Search Orders:</label>
+          <input type="text" id="orderSearchInput" oninput="loadAdminOrders()" placeholder="Order ID, Customer, Phone..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">Filter by Status:</label>
+          <select id="orderStatusFilter" onchange="loadAdminOrders()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <option value="">All 11 Stages</option>
+            <option value="Order Placed">1. Order Placed</option>
+            <option value="Payment Confirmed">2. Payment Confirmed</option>
+            <option value="Order Accepted">3. Order Accepted</option>
+            <option value="Growing / Production Scheduled">4. Production Scheduled</option>
+            <option value="Ready for Harvest">5. Ready for Harvest</option>
+            <option value="Harvested">6. Harvested</option>
+            <option value="Quality Checked">7. Quality Checked</option>
+            <option value="Packed">8. Packed</option>
+            <option value="Dispatched">9. Dispatched</option>
+            <option value="Out for Delivery">10. Out for Delivery</option>
+            <option value="Delivered">11. Delivered</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">Payment Status:</label>
+          <select id="orderPaymentFilter" onchange="loadAdminOrders()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <option value="">All Payments</option>
+            <option value="Paid">Paid</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved Credit">Approved Credit</option>
+          </select>
+        </div>
+        <div class="flex items-end space-x-2">
+          <a href="/api/exports/orders/excel" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-xl text-center">
+            Excel (.xlsx)
+          </a>
+          <a href="/api/exports/orders/csv" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-3 rounded-xl text-center">
+            CSV
+          </a>
+        </div>
+      </div>
+
+      <!-- VIEW A: ORDER TABLE -->
+      <div id="orderTableView" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+              <tr>
+                <th class="p-3.5">Order ID</th>
+                <th class="p-3.5">Date</th>
+                <th class="p-3.5">Customer & Phone</th>
+                <th class="p-3.5">Produce Items</th>
+                <th class="p-3.5">Amount & Payment</th>
+                <th class="p-3.5">Chennai Address</th>
+                <th class="p-3.5">Order Status</th>
+                <th class="p-3.5">Delivery Person</th>
+                <th class="p-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VIEW B: KANBAN BOARD -->
+      <div id="orderKanbanView" class="hidden overflow-x-auto pb-4">
+        <div class="flex space-x-4 min-w-[1400px]">
+          
+          <!-- Column 1: New Orders -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">New Orders</span>
+              <span id="kanbanCount-new" class="text-xs bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-new" class="space-y-3 flex-1"></div>
+          </div>
+
+          <!-- Column 2: Confirmed -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">Confirmed / Paid</span>
+              <span id="kanbanCount-confirmed" class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-confirmed" class="space-y-3 flex-1"></div>
+          </div>
+
+          <!-- Column 3: In Production -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">Growing Trays</span>
+              <span id="kanbanCount-production" class="text-xs bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-production" class="space-y-3 flex-1"></div>
+          </div>
+
+          <!-- Column 4: Harvesting & Packing -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">Harvest & Cold Pack</span>
+              <span id="kanbanCount-packing" class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-packing" class="space-y-3 flex-1"></div>
+          </div>
+
+          <!-- Column 5: Dispatched & Out for Delivery -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">EV Delivery Route</span>
+              <span id="kanbanCount-dispatched" class="text-xs bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-dispatched" class="space-y-3 flex-1"></div>
+          </div>
+
+          <!-- Column 6: Delivered -->
+          <div class="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col kanban-column">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-xs text-slate-800">Delivered</span>
+              <span id="kanbanCount-delivered" class="text-xs bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="kanbanList-delivered" class="space-y-3 flex-1"></div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== 3. FARM PRODUCTION & CULTIVATION ==================== -->
+    <section id="admin-sec-production" class="admin-sec hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Indoor Microgreens Cultivation Management</h2>
+          <p class="text-xs text-slate-500">Track seed quantities, active 1020 trays, germination, LED cycles and yields.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openSowingModal()" class="bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Log New Sowing Batch</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Production Alerts Banner -->
+      <div id="productionAlertsContainer" class="space-y-2">
+        <!-- Injected via JS -->
+      </div>
+
+      <!-- Batches Table -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <h3 class="font-bold text-sm text-slate-900">Active & Harvested Cultivation Batches</h3>
+          <span class="text-xs text-slate-500">Traceable to customer order IDs</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="p-3.5">Batch Code</th>
+                <th class="p-3.5">Variety</th>
+                <th class="p-3.5">Trays & Numbers</th>
+                <th class="p-3.5">Seed Qty (g)</th>
+                <th class="p-3.5">Sowing Date</th>
+                <th class="p-3.5">Expected Harvest</th>
+                <th class="p-3.5">Current Stage</th>
+                <th class="p-3.5">Exp / Actual Yield</th>
+                <th class="p-3.5">Quality Grade</th>
+                <th class="p-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cultivationBatchesBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== 4. INVENTORY MANAGEMENT ==================== -->
+    <section id="admin-sec-inventory" class="admin-sec hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Inventory & Consumables Warehouse</h2>
+          <p class="text-xs text-slate-500">Organic seeds, 1020 trays, cocopeat medium, biodegradable packaging and seals.</p>
+        </div>
+        <button onclick="openStockAdjustModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Stock In / Out Adjustment</span>
+        </button>
+      </div>
+
+      <!-- Low Stock Alerts -->
+      <div id="inventoryAlertsContainer" class="space-y-2"></div>
+
+      <!-- Inventory Table -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="p-3.5">Item Code</th>
+                <th class="p-3.5">Item Name</th>
+                <th class="p-3.5">Category</th>
+                <th class="p-3.5">Available Stock</th>
+                <th class="p-3.5">Min Threshold</th>
+                <th class="p-3.5">Opening Stock</th>
+                <th class="p-3.5">Consumed</th>
+                <th class="p-3.5">Supplier</th>
+                <th class="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== 5. CRM & CUSTOMERS ==================== -->
+    <section id="admin-sec-crm" class="admin-sec hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Customer Relationship Management (CRM)</h2>
+          <p class="text-xs text-slate-500">Retail foodies, doctors, subscription members and Chennai restaurant accounts.</p>
+        </div>
+        
+        <!-- Segment Filter Pills -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto text-xs">
+          <button onclick="filterCrmSegment('')" class="crm-pill active px-3 py-1.5 rounded-xl bg-djgreen-800 text-white font-bold">All Customers</button>
+          <button onclick="filterCrmSegment('Regular')" class="crm-pill px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold">Regular</button>
+          <button onclick="filterCrmSegment('Premium')" class="crm-pill px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold">Premium</button>
+          <button onclick="filterCrmSegment('Subscription')" class="crm-pill px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold">Subscription</button>
+          <button onclick="filterCrmSegment('Restaurant')" class="crm-pill px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold">B2B Restaurants</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="p-3.5">Customer Name</th>
+                <th class="p-3.5">Mobile Phone</th>
+                <th class="p-3.5">Locality & Pincode</th>
+                <th class="p-3.5">Type</th>
+                <th class="p-3.5">Total Orders</th>
+                <th class="p-3.5">Lifetime Value (₹)</th>
+                <th class="p-3.5">Last Order</th>
+                <th class="p-3.5">Status Segment</th>
+                <th class="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="crmCustomersBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 6. RESTAURANT B2B PORTAL ==================== -->
+    <section id="admin-sec-b2b" class="admin-sec hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Chennai Restaurant & Chef B2B Operations</h2>
+          <p class="text-xs text-slate-500">Bulk wholesale pricing, recurring weekly standing orders, and Net 15/30 credit terms.</p>
+        </div>
+        <a href="/b2b" target="_blank" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5">
+          <i data-lucide="chef-hat" class="w-4 h-4"></i>
+          <span>Open Chef Ordering Portal →</span>
+        </a>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- B2B Accounts List -->
+        <div class="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <h3 class="font-bold text-sm text-slate-900">Partnered Restaurants, Cafes & Luxury Hotels</h3>
+          <div id="b2bAccountsList" class="space-y-3">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Wholesale Price Catalog Card -->
+        <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <h3 class="font-bold text-sm text-slate-900">Chef Wholesale Price List</h3>
+          <div id="b2bWholesaleList" class="space-y-2 text-xs">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== 7. DELIVERY FLEET ==================== -->
+    <section id="admin-sec-delivery" class="admin-sec hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Chennai Delivery Fleet Management</h2>
+          <p class="text-xs text-slate-500">Live EV delivery vans and 2-wheelers across Chennai delivery zones.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="deliveryFleetGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ==================== 8. FINANCE & REPORTS ==================== -->
+    <section id="admin-sec-finance" class="admin-sec hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">Financial Reports & Profitability</h2>
+          <p class="text-xs text-slate-500">Gross revenue, GST tax compliance (5%), packaging & electricity operating expenses.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <a href="/api/exports/orders/excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Download Financial Statement</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Financial Metric Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="financeCardsContainer">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Expenses Ledger -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <h3 class="font-bold text-sm text-slate-900">Recent Farm Operational Expenses</h3>
+          <span class="text-xs text-slate-400">LED power, RO water filtration, cocopeat, logistics</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="p-3.5">Date</th>
+                <th class="p-3.5">Category</th>
+                <th class="p-3.5">Description</th>
+                <th class="p-3.5">Amount (₹)</th>
+                <th class="p-3.5">Payment Mode</th>
+                <th class="p-3.5">Voucher #</th>
+                <th class="p-3.5">Approved By</th>
+              </tr>
+            </thead>
+            <tbody id="expensesTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADVANCE ORDER STATUS (11 STAGES) -->
+  <div id="statusUpdateModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900">Update Order Status</h3>
+        <button onclick="closeStatusModal()" class="text-slate-400 hover:text-slate-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="modalOrderId">
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Select Stage (1 to 11):</label>
+          <select id="modalNewStatus" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900">
+            <option value="Order Placed">1. Order Placed</option>
+            <option value="Payment Confirmed">2. Payment Confirmed</option>
+            <option value="Order Accepted">3. Order Accepted</option>
+            <option value="Growing / Production Scheduled">4. Growing / Production Scheduled</option>
+            <option value="Ready for Harvest">5. Ready for Harvest</option>
+            <option value="Harvested">6. Harvested</option>
+            <option value="Quality Checked">7. Quality Checked</option>
+            <option value="Packed">8. Packed</option>
+            <option value="Dispatched">9. Dispatched</option>
+            <option value="Out for Delivery">10. Out for Delivery</option>
+            <option value="Delivered">11. Delivered</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Status Notes:</label>
+          <input type="text" id="modalStatusNotes" placeholder="e.g. Dispatched via EV Route 2" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2 border-t border-slate-100">
+        <button onclick="closeStatusModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-xs text-slate-600">Cancel</button>
+        <button onclick="submitOrderStatusUpdate()" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold text-xs hover:bg-djgreen-900">Update Status & Notify</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW SOWING BATCH -->
+  <div id="sowingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900">Log New Sowing Batch (Guindy Farm)</h3>
+        <button onclick="closeSowingModal()" class="text-slate-400 hover:text-slate-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="sowingForm" onsubmit="handleCreateSowing(event)" class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Microgreen Variety *</label>
+            <select id="sowProductSelect" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900">
+              <option value="1">Calabrese Broccoli</option>
+              <option value="2">Black Oil Sunflower</option>
+              <option value="3">China Rose Radish</option>
+              <option value="4">Mustard Microgreens</option>
+              <option value="5">Dun Pea Shoots</option>
+              <option value="6">Beetroot Microgreens</option>
+              <option value="7">Ruby Red Cabbage</option>
+              <option value="8">Organic Wheatgrass</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Seed Quantity (Grams) *</label>
+            <input type="number" id="sowSeedQty" required value="500" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Tray Count (1020 Trays) *</label>
+            <input type="number" id="sowTrayCount" required value="10" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Tray Numbers *</label>
+            <input type="text" id="sowTrayNumbers" required value="T-201 to T-210" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Sowing Date *</label>
+            <input type="date" id="sowDate" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-[11px]">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Exp Germination *</label>
+            <input type="date" id="sowGermDate" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-[11px]">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Exp Harvest *</label>
+            <input type="date" id="sowHarvestDate" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-[11px]">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Expected Yield (Grams) *</label>
+          <input type="number" id="sowYield" required value="2000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-djgreen-900">
+        </div>
+
+        <div class="flex space-x-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="closeSowingModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Initiate Batch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN JAVASCRIPT -->
+  <script src="/static/js/admin.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

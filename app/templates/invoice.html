@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tax Invoice – {{ order.order_number }} – DJ Microgreens Chennai</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/custom.css">
+  <style>
+    @media print {
+      body { background: white !important; }
+      .no-print { display: none !important; }
+      .invoice-box { box-shadow: none !important; border: none !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 p-4 sm:p-8 text-slate-800 text-xs">
+
+  <!-- Printable Invoice Container -->
+  <div class="max-w-3xl mx-auto bg-white p-6 sm:p-10 rounded-2xl shadow-lg border border-slate-200 invoice-box space-y-6">
+    
+    <!-- Print & Back Actions -->
+    <div class="no-print flex items-center justify-between pb-4 border-b border-slate-200">
+      <a href="/" class="text-emerald-700 font-bold hover:underline flex items-center space-x-1">
+        <span>← Back to DJ Microgreens</span>
+      </a>
+      <button onclick="window.print()" class="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow">
+        <span>Print Tax Invoice</span>
+      </button>
+    </div>
+
+    <!-- Invoice Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b-2 border-emerald-800">
+      <div class="space-y-1">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl font-black tracking-wide text-emerald-900">DJ MICROGREENS</span>
+          <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">ORIGINAL</span>
+        </div>
+        <p class="text-slate-600 text-[11px] font-medium">Freshness Delivered. Nutrition Naturally.</p>
+        <p class="text-slate-500 text-[11px]">Guindy Industrial Micro-Farm, Guindy, Chennai, TN - 600032</p>
+        <p class="text-slate-500 text-[11px]"><strong>GSTIN:</strong> 33AAACD9901F1Z2 • <strong>FSSAI:</strong> 22426001004120</p>
+      </div>
+
+      <div class="text-left sm:text-right space-y-1">
+        <h2 class="text-lg font-bold text-slate-900">TAX INVOICE</h2>
+        <div class="font-mono text-sm font-black text-emerald-900">{{ order.order_number }}</div>
+        <p class="text-slate-500 text-[11px]"><strong>Invoice Date:</strong> {{ order.order_date }}</p>
+        <p class="text-slate-500 text-[11px]"><strong>Batch Traceability:</strong> {{ order.batch_id or 'DJ-BAT-2026-081' }}</p>
+      </div>
+    </div>
+
+    <!-- Bill To / Ship To -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-4 border-b border-slate-100">
+      <div>
+        <span class="font-bold uppercase text-[10px] text-slate-400 block mb-1">Billed To & Delivery Address:</span>
+        <h4 class="font-bold text-sm text-slate-900">{{ order.customer_name }}</h4>
+        <p class="text-slate-600 mt-0.5">{{ order.shipping_address }}</p>
+        <p class="text-slate-600">Chennai - {{ order.shipping_pincode }}, Tamil Nadu</p>
+        <p class="text-slate-600"><strong>Phone:</strong> {{ order.customer_phone }}</p>
+      </div>
+
+      <div class="sm:text-right space-y-1">
+        <span class="font-bold uppercase text-[10px] text-slate-400 block mb-1">Fulfillment Details:</span>
+        <p class="text-slate-600"><strong>Delivery Date:</strong> {{ order.delivery_date }}</p>
+        <p class="text-slate-600"><strong>Time Slot:</strong> {{ order.delivery_slot }}</p>
+        <p class="text-slate-600"><strong>Payment Mode:</strong> {{ order.payment_method }} ({{ order.payment_status }})</p>
+        <p class="text-slate-600"><strong>Transaction Ref:</strong> {{ order.payment_id or 'TXN_LOCAL_01' }}</p>
+      </div>
+    </div>
+
+    <!-- Order Items Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+          <tr>
+            <th class="py-2.5 px-3">#</th>
+            <th class="py-2.5 px-3">Item Description</th>
+            <th class="py-2.5 px-3">HSN Code</th>
+            <th class="py-2.5 px-3">Portion</th>
+            <th class="py-2.5 px-3 text-right">Unit Rate (₹)</th>
+            <th class="py-2.5 px-3 text-center">Qty</th>
+            <th class="py-2.5 px-3 text-right">Amount (₹)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for item in items %}
+          <tr>
+            <td class="py-3 px-3 text-slate-400 font-mono">{{ loop.index }}</td>
+            <td class="py-3 px-3 font-semibold text-slate-900">{{ item.product_name }}</td>
+            <td class="py-3 px-3 text-slate-500 font-mono">07099990</td>
+            <td class="py-3 px-3 text-slate-600">{{ item.weight_label }}</td>
+            <td class="py-3 px-3 text-right text-slate-700">₹{{ "%.2f"|format(item.unit_price) }}</td>
+            <td class="py-3 px-3 text-center font-bold text-slate-900">{{ item.quantity }}</td>
+            <td class="py-3 px-3 text-right font-bold text-slate-900">₹{{ "%.2f"|format(item.total_price) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Financial Calculation Summary -->
+    <div class="flex flex-col sm:flex-row justify-between items-start pt-4 border-t border-slate-200 gap-6">
+      <div class="space-y-2 max-w-sm">
+        <span class="font-bold text-[10px] uppercase tracking-wider text-slate-400 block">Cold Chain Storage Instructions:</span>
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          Keep living microgreens stored in original ventilated containers inside home refrigerator at 4°C - 6°C. 
+          Consume within 7 days of harvest for optimal sulforaphane, enzyme vitality and crunch.
+        </p>
+      </div>
+
+      <div class="w-full sm:w-64 space-y-1.5 text-xs text-slate-700">
+        <div class="flex justify-between">
+          <span>Subtotal</span>
+          <span class="font-semibold text-slate-900">₹{{ "%.2f"|format(order.subtotal) }}</span>
+        </div>
+        {% if order.discount > 0 %}
+        <div class="flex justify-between text-emerald-700 font-semibold">
+          <span>Coupon Discount</span>
+          <span>-₹{{ "%.2f"|format(order.discount) }}</span>
+        </div>
+        {% endif %}
+        <div class="flex justify-between">
+          <span>Delivery Charge (Chennai)</span>
+          <span>₹{{ "%.2f"|format(order.delivery_fee) }}</span>
+        </div>
+        <div class="flex justify-between text-slate-500 text-[11px]">
+          <span>CGST (2.5%)</span>
+          <span>₹{{ "%.2f"|format(order.gst / 2) }}</span>
+        </div>
+        <div class="flex justify-between text-slate-500 text-[11px]">
+          <span>SGST (2.5%)</span>
+          <span>₹{{ "%.2f"|format(order.gst / 2) }}</span>
+        </div>
+        <div class="flex justify-between text-sm font-black text-emerald-950 pt-2 border-t-2 border-slate-200">
+          <span>Total (INR)</span>
+          <span class="text-base text-emerald-900">₹{{ "%.2f"|format(order.total_amount) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice Footer & Sign-off -->
+    <div class="pt-8 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-4">
+      <div>
+        <p>This is a computer-generated official tax invoice under the GST Law of Tamil Nadu.</p>
+        <p>Support: care@djmicrogreens.com • WhatsApp: +91 98401 22334</p>
+      </div>
+      <div class="text-center sm:text-right">
+        <div class="font-bold text-slate-700 text-xs">For DJ Microgreens Private Limited</div>
+        <div class="italic text-[10px] text-slate-500 mt-2">Authorized Signatory (Digital)</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Microgreens – Chennai Restaurant & Chef B2B Wholesale Portal</title>
+  
+  <link rel="icon" type="image/png" href="https://img.icons8.com/color/96/sprout.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            djgreen: {
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body class="bg-[#faf8f5] text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- TOP BAR -->
+  <header class="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <a href="/" class="flex items-center space-x-2">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold">
+            <i data-lucide="chef-hat" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <span class="font-extrabold text-base tracking-wide text-white">DJ MICROGREENS B2B</span>
+            <span class="text-[10px] text-emerald-400 block font-medium">Chennai Executive Chefs & Culinary Operations</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="flex items-center space-x-3 text-xs">
+        <span class="text-slate-400 hidden sm:inline">Active Chef Account:</span>
+        <select id="b2bClientSelect" onchange="updateB2bClient(this.value)" class="bg-slate-800 border border-slate-700 text-emerald-300 font-bold px-3 py-1.5 rounded-xl focus:outline-none">
+          <option value="4">Chef Vikram – ITC Grand Chola (Guindy)</option>
+          <option value="5">Chef Anand – Pumpkin Tales Cafe (Alwarpet)</option>
+          <option value="6">Executive Kitchen – The Marina Restaurant (Nungambakkam)</option>
+        </select>
+        <a href="/" class="text-slate-300 hover:text-white px-2 py-1">Retail Store →</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN B2B CONTENT -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    
+    <!-- Hero Banner for Chefs -->
+    <div class="bg-gradient-to-r from-slate-900 via-djgreen-950 to-djgreen-900 text-white rounded-3xl p-6 sm:p-10 shadow-xl relative overflow-hidden">
+      <div class="relative max-w-2xl space-y-4">
+        <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Direct Farm Sourcing For Chennai HORECA</span>
+        <h1 class="text-3xl sm:text-4xl font-bold font-serif">Fresh Living Canopies for Gourmet Plating</h1>
+        <p class="text-xs sm:text-sm text-slate-200 leading-relaxed">
+          Harvested at 5:00 AM specifically for your kitchen service. Available as live uncut 1020 microgreen trays or bulk-packed sanitized 250g/500g catering packs.
+        </p>
+        <div class="flex flex-wrap gap-4 pt-2 text-xs text-slate-300">
+          <span class="flex items-center space-x-1.5"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i><span>Net 15 & Net 30 Credit</span></span>
+          <span class="flex items-center space-x-1.5"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i><span>Custom Chef Variety Blends</span></span>
+          <span class="flex items-center space-x-1.5"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i><span>Direct Guindy Farm Logistics</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chef Quick Bulk Ordering & Wholesale Price Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Left: Wholesale Bulk Products -->
+      <div class="lg:col-span-8 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-slate-900">Commercial Wholesale Price List</h2>
+          <span class="text-xs text-slate-500 font-semibold">Minimum Order Quantity (MOQ): 500g</span>
+        </div>
+
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="p-3.5">Microgreen Variety</th>
+                <th class="p-3.5">Portion / Weight</th>
+                <th class="p-3.5">Standard Retail</th>
+                <th class="p-3.5">Wholesale Price (₹)</th>
+                <th class="p-3.5">Savings</th>
+                <th class="p-3.5 text-right">Order Qty</th>
+              </tr>
+            </thead>
+            <tbody id="b2bWholesaleTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: Commercial Standing Order Summary -->
+      <div class="lg:col-span-4 space-y-4">
+        <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="font-bold text-sm text-slate-900">B2B Order Manifest</h3>
+            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">Net 15 Terms</span>
+          </div>
+
+          <div id="b2bOrderItemsSummary" class="space-y-2 text-xs text-slate-600 min-h-[120px]">
+            <p class="text-slate-400 text-center py-8">Select quantities from the wholesale catalog on the left.</p>
+          </div>
+
+          <div class="space-y-1.5 text-xs text-slate-600 pt-3 border-t border-slate-100">
+            <div class="flex justify-between">
+              <span>Subtotal</span>
+              <span id="b2bSubtotal" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div class="flex justify-between">
+              <span>GST (5%)</span>
+              <span id="b2bGst" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Kitchen Logistics (Chennai)</span>
+              <span class="font-bold text-emerald-700">FREE</span>
+            </div>
+            <div class="flex justify-between text-base font-black text-djgreen-900 pt-2 border-t border-slate-200">
+              <span>Total Invoice</span>
+              <span id="b2bTotal">₹0.00</span>
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-2">
+            <label class="block text-[11px] font-semibold text-slate-600">Select Service Delivery Date:</label>
+            <input type="date" id="b2bDeliveryDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+            
+            <label class="block text-[11px] font-semibold text-slate-600 mt-2">Chef Plating Notes:</label>
+            <input type="text" id="b2bNotes" placeholder="e.g. Long tendrils on pea shoots for Saturday dinner service" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+          </div>
+
+          <button onclick="submitB2bOrder()" class="w-full bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-3 rounded-2xl text-xs transition shadow-md">
+            Schedule Wholesale Harvest →
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="bg-slate-900 text-slate-400 text-xs py-8 border-t border-slate-800 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 text-center space-y-1">
+      <p class="text-white font-bold">DJ Microgreens Culinary B2B Division</p>
+      <p>Specialized Living Trays & Micro-Herbs for Chennai's Finest Kitchens.</p>
+    </div>
+  </footer>
+
+  <script>
+    lucide.createIcons();
+    let b2bCatalog = [];
+    let b2bCart = {};
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set tomorrow's date as default
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('b2bDeliveryDate').value = tomorrow.toISOString().split('T')[0];
+      loadWholesaleProducts();
+    });
+
+    async function loadWholesaleProducts() {
+      try {
+        const res = await fetch('/api/admin/b2b/summary');
+        const data = await res.json();
+        b2bCatalog = data.wholesale_catalog;
+        renderWholesaleTable();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderWholesaleTable() {
+      const tbody = document.getElementById('b2bWholesaleTableBody');
+      tbody.innerHTML = b2bCatalog.map((item, idx) => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-3.5 font-bold text-slate-900">${item.name}</td>
+          <td class="p-3.5 font-semibold text-emerald-800">${item.weight_label}</td>
+          <td class="p-3.5 text-slate-400 line-through">₹${item.retail_price}</td>
+          <td class="p-3.5 font-black text-djgreen-900 text-sm">₹${item.wholesale_price}</td>
+          <td class="p-3.5 font-bold text-emerald-600">Save ${item.savings_pct}%</td>
+          <td class="p-3.5 text-right">
+            <div class="inline-flex items-center border border-slate-200 rounded-lg bg-white">
+              <button onclick="updateB2bQty(${idx}, -1)" class="px-2 py-0.5 text-slate-600 hover:bg-slate-100 font-bold">-</button>
+              <span class="px-2.5 font-bold text-slate-900" id="b2bQty-${idx}">0</span>
+              <button onclick="updateB2bQty(${idx}, 1)" class="px-2 py-0.5 text-slate-600 hover:bg-slate-100 font-bold">+</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function updateB2bQty(idx, delta) {
+      const item = b2bCatalog[idx];
+      const cur = b2bCart[idx] || 0;
+      const next = Math.max(0, cur + delta);
+      b2bCart[idx] = next;
+
+      document.getElementById(`b2bQty-${idx}`).textContent = next;
+      renderB2bCartSummary();
+    }
+
+    function renderB2bCartSummary() {
+      const container = document.getElementById('b2bOrderItemsSummary');
+      let subtotal = 0;
+      let hasItems = false;
+      let html = '';
+
+      for (const [idx, qty] of Object.entries(b2bCart)) {
+        if (qty > 0) {
+          hasItems = true;
+          const it = b2bCatalog[idx];
+          const lineTot = it.wholesale_price * qty;
+          subtotal += lineTot;
+          html += `
+            <div class="flex justify-between py-1 border-b border-slate-100">
+              <span>${it.name} (${it.weight_label}) × ${qty}</span>
+              <span class="font-bold text-slate-900">₹${lineTot.toFixed(2)}</span>
+            </div>
+          `;
+        }
+      }
+
+      if (!hasItems) {
+        container.innerHTML = `<p class="text-slate-400 text-center py-8">Select quantities from the wholesale catalog on the left.</p>`;
+        document.getElementById('b2bSubtotal').textContent = '₹0.00';
+        document.getElementById('b2bGst').textContent = '₹0.00';
+        document.getElementById('b2bTotal').textContent = '₹0.00';
+        return;
+      }
+
+      container.innerHTML = html;
+      const gst = subtotal * 0.05;
+      const tot = subtotal + gst;
+
+      document.getElementById('b2bSubtotal').textContent = `₹${subtotal.toFixed(2)}`;
+      document.getElementById('b2bGst').textContent = `₹${gst.toFixed(2)}`;
+      document.getElementById('b2bTotal').textContent = `₹${tot.toFixed(2)}`;
+    }
+
+    async function submitB2bOrder() {
+      const clientId = document.getElementById('b2bClientSelect').value;
+      const items = [];
+
+      for (const [idx, qty] of Object.entries(b2bCart)) {
+        if (qty > 0) {
+          const it = b2bCatalog[idx];
+          items.push({
+            name: it.name,
+            weight: it.weight_label,
+            price: it.wholesale_price,
+            qty: qty
+          });
+        }
+      }
+
+      if (items.length === 0) {
+        alert("Please select at least one microgreens variety.");
+        return;
+      }
+
+      const payload = {
+        customer_id: parseInt(clientId),
+        delivery_date: document.getElementById('b2bDeliveryDate').value,
+        delivery_slot: "Morning (7:00 AM - 9:00 AM)",
+        credit_terms: "Net 15",
+        items: items,
+        notes: document.getElementById('b2bNotes').value
+      };
+
+      try {
+        const res = await fetch('/api/admin/b2b/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`🎉 B2B Order ${data.order_number} confirmed for ₹${data.total_amount}!\nFarm production scheduled in Guindy.`);
+          b2bCart = {};
+          renderWholesaleTable();
+          renderB2bCartSummary();
+        }
+      } catch (err) {
+        alert("Could not process B2B order.");
+      }
+    }
+  </script>
+</body>
+</html>
