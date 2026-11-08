@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
@@ -112,7 +112,7 @@ def get_dashboard_stats():
         pending_payments = cursor.fetchone()[0]
 
         # Customer growth
-        cursor.execute("SELECT COUNT(*) FROM customers")
+        cursor.execute("SELECT COUNT(*) FROM customers WHERE total_orders > 0")
         total_customers = cursor.fetchone()[0]
 
         cursor.execute("SELECT COUNT(*) FROM customers WHERE total_orders > 1")
@@ -128,9 +128,6 @@ def get_dashboard_stats():
             d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
             cursor.execute("SELECT COALESCE(SUM(total_amount), 0.0) FROM orders WHERE order_date = ? AND payment_status = 'Paid'", (d,))
             sales_val = cursor.fetchone()[0]
-            # Add synthetic distribution if today has all initial records
-            if sales_val == 0.0:
-                sales_val = [1850.0, 2400.0, 3100.0, 2750.0, 4200.0, 3900.0, 4800.0][6 - i]
             daily_sales.append({"date": d, "day": (datetime.now() - timedelta(days=i)).strftime("%a"), "amount": round(sales_val, 2)})
 
         # Product-wise Sales
@@ -223,7 +220,7 @@ def get_orders(
         return orders
 
 @router.post("/orders/update-status")
-def update_order_status(req: StatusUpdateRequest):
+def update_order_status(req: StatusUpdateRequest, request: Request):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (req.order_id,))
@@ -270,8 +267,8 @@ def update_order_status(req: StatusUpdateRequest):
         # Log audit
         cursor.execute("""
         INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
-        VALUES ('admin', 'STATUS_CHANGE', 'Order', ?, ?)
-        """, (order["order_number"], f"Changed status to '{req.new_status}'. Notes: {req.notes}"))
+        VALUES (?, 'STATUS_CHANGE', 'Order', ?, ?)
+        """, (request.state.user["username"], order["order_number"],f"Changed status to '{req.new_status}'. Notes: {req.notes}"))
 
         # Notification & WhatsApp Simulation
         wa_msg = f"🌱 *DJ Microgreens Update!*\n\nOrder *#{order['order_number']}* status updated: *{req.new_status}*.\n\nTrack: http://localhost:8000/?track={order['order_number']}"
@@ -576,6 +573,14 @@ def create_b2b_order(req: B2BOrderCreateRequest):
             INSERT INTO order_items (order_id, product_name, weight_label, unit_price, quantity, total_price)
             VALUES (?, ?, ?, ?, ?, ?)
             """, (order_id, it.get("name", "Gourmet Microgreens"), it.get("weight", "500g"), it.get("price", 500), it.get("qty", 1), it.get("price", 500) * it.get("qty", 1)))
+
+        cursor.execute("""
+        UPDATE customers
+        SET total_orders = total_orders + 1,
+            lifetime_value = lifetime_value + ?,
+            last_order_date = ?
+        WHERE id = ?
+        """, (total, today_str, client["id"]))
 
         return {"success": True, "order_number": order_num, "total_amount": total}
 

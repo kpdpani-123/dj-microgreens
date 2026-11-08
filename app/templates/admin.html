@@ -54,23 +54,34 @@
       <!-- Quick Role Switcher & User Profile -->
       <div class="flex items-center space-x-3 text-xs">
         
-        <div class="hidden sm:flex items-center space-x-2 bg-emerald-950/60 border border-emerald-700/50 px-3 py-1.5 rounded-xl">
-          <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
-          <span class="text-slate-300">Active Role:</span>
-          <select id="adminRoleSelect" onchange="switchAdminRole(this.value)" class="bg-transparent text-emerald-200 font-bold focus:outline-none cursor-pointer">
-            <option value="Super Admin" class="bg-slate-900 text-white">Super Admin (Devanand J.)</option>
-            <option value="Operations Manager" class="bg-slate-900 text-white">Operations Manager (Priya S.)</option>
-            <option value="Farm Manager" class="bg-slate-900 text-white">Farm Manager (Muthukumar R.)</option>
-            <option value="Inventory Manager" class="bg-slate-900 text-white">Inventory Manager (Kavitha R.)</option>
-            <option value="Delivery Manager" class="bg-slate-900 text-white">Delivery Manager (Arun P.)</option>
-            <option value="Sales Manager" class="bg-slate-900 text-white">Sales & B2B Manager (Deepika V.)</option>
-          </select>
-        </div>
-
         <a href="/" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition">
           <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
           <span class="hidden sm:inline">View Storefront</span>
         </a>
+
+        <!-- Signed-in user & account menu -->
+        <div class="relative">
+          <button id="userMenuBtn" onclick="toggleUserMenu()" class="flex items-center space-x-2 bg-emerald-950/60 border border-emerald-700/50 px-3 py-1.5 rounded-xl hover:bg-emerald-950">
+            <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span class="text-left leading-tight">
+              <span id="currentUserName" class="block font-bold text-emerald-100">…</span>
+              <span id="currentUserRole" class="block text-[10px] text-emerald-300/80"></span>
+            </span>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-emerald-300"></i>
+          </button>
+          <div id="userMenu" class="hidden absolute right-0 mt-2 w-56 bg-white text-slate-800 rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50">
+            <button onclick="openAccountModal()" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2">
+              <i data-lucide="user-cog" class="w-4 h-4 text-slate-500"></i><span>My account (username & password)</span>
+            </button>
+            <button id="manageStaffMenuItem" onclick="openStaffModal()" class="hidden w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2">
+              <i data-lucide="users-round" class="w-4 h-4 text-slate-500"></i><span>Manage staff logins</span>
+            </button>
+            <div class="border-t border-slate-100 my-1"></div>
+            <button onclick="logout()" class="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-700 flex items-center space-x-2">
+              <i data-lucide="log-out" class="w-4 h-4"></i><span>Sign out</span>
+            </button>
+          </div>
+        </div>
 
       </div>
 
@@ -122,6 +133,15 @@
 
   <!-- ADMIN BODY CONTENT -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- Default password reminder -->
+    <div id="defaultPasswordBanner" class="hidden p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="key-round" class="w-4 h-4"></i>
+        <span class="font-bold">You are using the default password. Please set your own password.</span>
+      </div>
+      <button onclick="openAccountModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-xl">Change password</button>
+    </div>
 
     <!-- ==================== 1. OVERVIEW & KPIS ==================== -->
     <section id="admin-sec-overview" class="admin-sec block space-y-6">
@@ -197,7 +217,7 @@
         <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
           <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cancelled Orders</span>
           <div id="statCancelled" class="text-2xl font-black text-rose-600">-</div>
-          <span class="text-[10px] text-slate-400 font-medium">0.2% Low Rate</span>
+          <span class="text-[10px] text-slate-400 font-medium">Not fulfilled</span>
         </div>
 
         <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
@@ -221,7 +241,7 @@
         <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
           <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Repeat Customers</span>
           <div id="statRepeatCustomers" class="text-2xl font-black text-indigo-700">-</div>
-          <span class="text-[10px] text-indigo-600 font-bold">75% High Retention</span>
+          <span class="text-[10px] text-indigo-600 font-bold">2+ orders</span>
         </div>
 
         <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
@@ -755,6 +775,60 @@
           <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Initiate Batch</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MY ACCOUNT (CHANGE USERNAME / PASSWORD) -->
+  <div id="accountModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-base text-slate-900">My account</h3>
+          <p id="accountRoleLabel" class="text-[11px] text-slate-500"></p>
+        </div>
+        <button onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="accountForm" onsubmit="submitAccountChanges(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Display name</label>
+          <input type="text" id="accFullName" placeholder="Your name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Username</label>
+          <input type="text" id="accUsername" required autocomplete="username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">New password <span class="font-normal text-slate-400">(leave blank to keep current)</span></label>
+          <input type="password" id="accNewPassword" autocomplete="new-password" minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Confirm new password</label>
+          <input type="password" id="accConfirmPassword" autocomplete="new-password" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block font-semibold text-slate-600 mb-1">Current password * <span class="font-normal text-slate-400">(needed to save changes)</span></label>
+          <input type="password" id="accCurrentPassword" required autocomplete="current-password" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+        </div>
+        <p id="accountMsg" class="hidden font-semibold rounded-xl px-3 py-2"></p>
+        <div class="flex space-x-2 pt-2">
+          <button type="button" onclick="closeAccountModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MANAGE STAFF LOGINS (SUPER ADMIN) -->
+  <div id="staffModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-base text-slate-900">Manage staff logins</h3>
+          <p class="text-[11px] text-slate-500">Change a staff member's name or username, or set a new password for them.</p>
+        </div>
+        <button onclick="closeStaffModal()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div id="staffList" class="space-y-3 text-xs"></div>
     </div>
   </div>
 
