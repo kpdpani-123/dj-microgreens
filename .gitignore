@@ -41,3 +41,6 @@ Thumbs.db
 .vscode/
 .idea/
 .vercel
+
+# Local copy of the Turso database
+data/turso_replica.db*

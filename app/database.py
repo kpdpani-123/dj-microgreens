@@ -1,13 +1,25 @@
 import sqlite3
 import os
 import shutil
+import threading
+import time
 from pathlib import Path
 from contextlib import contextmanager
 
 # Detect Vercel serverless environment
 IS_VERCEL = bool(os.environ.get("VERCEL"))
 
-if IS_VERCEL:
+# Hosted Turso database (permanent storage). Vercel's Turso integration sets these.
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL") or os.environ.get("LIBSQL_URL")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN") or os.environ.get("LIBSQL_AUTH_TOKEN") or ""
+USE_TURSO = bool(TURSO_URL)
+
+if USE_TURSO:
+    # Local copy of the hosted database, kept in sync with Turso
+    REPLICA_DIR = Path("/tmp") if IS_VERCEL else Path(__file__).resolve().parent.parent / "data"
+    REPLICA_DIR.mkdir(exist_ok=True)
+    DB_PATH = REPLICA_DIR / "turso_replica.db"
+elif IS_VERCEL:
     DB_DIR = Path("/tmp")
     DB_PATH = DB_DIR / "dj_microgreens.db"
     # Copy pre-seeded DB if present in repo
@@ -22,6 +34,104 @@ else:
     DB_DIR.mkdir(exist_ok=True)
     DB_PATH = DB_DIR / "dj_microgreens.db"
 
+class Row(tuple):
+    """A result row readable by position (row[0]) or column name (row["name"]), like sqlite3.Row."""
+
+    def __new__(cls, values, index):
+        row = super().__new__(cls, values)
+        row._index = index
+        return row
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return tuple.__getitem__(self, self._index[key])
+        return tuple.__getitem__(self, key)
+
+    def keys(self):
+        return list(self._index)
+
+
+class _Cursor:
+    """Wraps a libsql cursor so rows behave like sqlite3.Row."""
+
+    def __init__(self, cursor):
+        self._cur = cursor
+
+    def _index(self):
+        return {d[0]: i for i, d in enumerate(self._cur.description or [])}
+
+    def execute(self, sql, params=()):
+        self._cur.execute(sql, tuple(params))
+        return self
+
+    def executemany(self, sql, seq):
+        self._cur.executemany(sql, [tuple(p) for p in seq])
+        return self
+
+    def fetchone(self):
+        row = self._cur.fetchone()
+        return None if row is None else Row(row, self._index())
+
+    def fetchall(self):
+        index = self._index()
+        return [Row(r, index) for r in self._cur.fetchall()]
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+    @property
+    def lastrowid(self):
+        return self._cur.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    @property
+    def description(self):
+        return self._cur.description
+
+
+class _Connection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return _Cursor(self._conn.cursor())
+
+    def execute(self, sql, params=()):
+        return self.cursor().execute(sql, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+
+_turso_lock = threading.RLock()
+_turso_conn = None
+_last_sync = 0.0
+SYNC_EVERY_SECONDS = 1.0
+
+
+def _get_turso_connection():
+    """One shared connection per server instance, refreshed from Turso before use."""
+    global _turso_conn, _last_sync
+    import libsql
+
+    if _turso_conn is None:
+        raw = libsql.connect(
+            str(DB_PATH), sync_url=TURSO_URL, auth_token=TURSO_TOKEN, _check_same_thread=False
+        )
+        _turso_conn = _Connection(raw)
+        _last_sync = 0.0
+    if time.time() - _last_sync > SYNC_EVERY_SECONDS:
+        _turso_conn._conn.sync()
+        _last_sync = time.time()
+    return _turso_conn
+
+
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH), timeout=20.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -30,6 +140,17 @@ def get_connection():
 
 @contextmanager
 def get_db():
+    if USE_TURSO:
+        with _turso_lock:
+            conn = _get_turso_connection()
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return
+
     conn = get_connection()
     try:
         yield conn
