@@ -567,6 +567,7 @@ def init_db():
         # Columns added after the first release
         _add_missing_columns(cursor, "inventory", {"supplier_name": "TEXT"})
         _add_missing_columns(cursor, "otp_requests", {"email": "TEXT"})
+        _add_missing_columns(cursor, "customers", {"google_sub": "TEXT"})
         _add_missing_columns(cursor, "customers", {"credit_terms": "TEXT DEFAULT 'Net 15'"})
 
 

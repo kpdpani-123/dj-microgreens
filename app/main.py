@@ -84,6 +84,10 @@ async def staff_login_page(request: Request):
         return RedirectResponse("/admin", status_code=303)
     return templates.TemplateResponse(request=request, name="login.html", context={})
 
+@app.get("/account", response_class=HTMLResponse)
+def customer_account_page(request: Request):
+    return templates.TemplateResponse(request=request, name="account.html", context={})
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_portal(request: Request):
     if not get_user_from_token(request.cookies.get(SESSION_COOKIE)):

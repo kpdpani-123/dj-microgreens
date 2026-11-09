@@ -927,7 +927,7 @@
         <div id="acctInitials" class="w-8 h-8 rounded-full bg-djgreen-800 text-white flex items-center justify-center font-bold text-xs"><i data-lucide="user" class="w-4 h-4"></i></div>
         <div>
           <h3 id="acctHeaderName" class="font-bold text-sm text-slate-900">My Account</h3>
-          <p id="acctHeaderSub" class="text-[11px] text-slate-500">Sign in with your mobile number and email</p>
+          <p id="acctHeaderSub" class="text-[11px] text-slate-500">Login or sign up</p>
         </div>
       </div>
       <button onclick="toggleAccountDrawer(false)" class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500">
@@ -937,34 +937,14 @@
 
     <div class="p-4 flex-1 overflow-y-auto space-y-6">
 
-      <!-- STATE 1: SIGN IN WITH PHONE + CODE SENT BY EMAIL -->
+      <!-- STATE 1: NOT LOGGED IN (login happens on the /account page) -->
       <div id="acctSignIn" class="space-y-4 text-xs">
         <p id="acctSignInReason" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-semibold"></p>
         <div id="acctOtpOff" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600">
-          Customer sign-in is being set up. You can still order as a guest from the cart.
+          Customer login is being set up. You can still order as a guest from the cart.
         </div>
-        <form id="acctPhoneForm" onsubmit="requestOtp(event)" class="space-y-3">
-          <label class="block font-semibold text-slate-600">Mobile number</label>
-          <div class="flex">
-            <span class="px-3 py-2.5 bg-slate-100 border border-r-0 border-slate-200 rounded-l-xl font-bold text-slate-600">+91</span>
-            <input id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required
-                   class="flex-1 bg-slate-50 border border-slate-200 rounded-r-xl px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-djgreen-600">
-          </div>
-          <label class="block font-semibold text-slate-600">Email</label>
-          <input id="acctEmail" type="email" autocomplete="email" placeholder="you@example.com" required
-                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-none">
-          <p class="text-[11px] text-slate-500">We'll email you a 6-digit code. If this number already has an account, the code goes to the email saved on it.</p>
-          <button id="acctSendOtpBtn" type="submit" class="w-full bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-2.5 rounded-xl transition">Email me a code</button>
-        </form>
-        <form id="acctOtpForm" onsubmit="submitOtp(event)" class="hidden space-y-3">
-          <p class="text-slate-600">Enter the 6-digit code we emailed to <strong id="acctOtpPhone"></strong>
-            <button type="button" onclick="changeAcctPhone()" class="text-emerald-700 font-bold underline ml-1">Change</button></p>
-          <input id="acctOtp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" required
-                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-lg font-black tracking-[0.4em] text-center focus:outline-none focus:ring-1 focus:ring-djgreen-600">
-          <button id="acctVerifyBtn" type="submit" class="w-full bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-2.5 rounded-xl transition">Verify & Sign In</button>
-          <button type="button" id="acctResendBtn" onclick="requestOtp()" class="w-full text-emerald-700 font-bold py-1">Resend code</button>
-        </form>
-        <p id="acctMsg" class="hidden font-semibold rounded-xl px-3 py-2"></p>
+        <a id="acctLoginLink" href="/account?next=account" class="hidden block w-full text-center bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-3 rounded-xl text-sm transition">Login / Sign up</a>
+        <p id="acctLoginHint" class="hidden text-slate-500 text-center">Continue with your Google account. New customers sign up in a few seconds.</p>
       </div>
 
       <!-- STATE 2: PROFILE DETAILS -->
@@ -973,6 +953,8 @@
           <h4 class="font-bold text-sm text-slate-900">Your details</h4>
           <p class="text-slate-500">Used to fill in checkout. You can change the delivery address for each order.</p>
         </div>
+        <div><label class="block font-semibold text-slate-600 mb-1">Mobile number *</label>
+          <input id="profPhone" type="tel" inputmode="numeric" required autocomplete="tel-national" maxlength="14" placeholder="98765 43210" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold"></div>
         <div><label class="block font-semibold text-slate-600 mb-1">Full name *</label>
           <input id="profName" required autocomplete="name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
         <div><label class="block font-semibold text-slate-600 mb-1">Email</label>

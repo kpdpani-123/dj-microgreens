@@ -19,6 +19,7 @@ from app.customer_auth import (
     create_customer_token,
     current_customer,
     find_customer_by_phone,
+    google_client_id,
     hash_code,
     mask_email,
     new_code,
@@ -27,6 +28,8 @@ from app.customer_auth import (
     phone_digits,
     public_customer,
     send_email_code,
+    sign_in_enabled,
+    verify_google_credential,
 )
 from app.database import get_db
 from app.routers.admin import B2BOrderCreateRequest, place_b2b_order, wholesale_catalog
@@ -39,12 +42,17 @@ class PhoneRequest(BaseModel):
     email: Optional[str] = ""
 
 
+class GoogleRequest(BaseModel):
+    credential: str
+
+
 class VerifyRequest(BaseModel):
     phone: str
     otp: str
 
 
 class ProfileRequest(BaseModel):
+    phone: Optional[str] = None
     name: str
     email: Optional[str] = ""
     address: str
@@ -62,7 +70,7 @@ class ChefOrderRequest(BaseModel):
 def require_customer(request: Request, conn) -> dict:
     customer = current_customer(request, conn)
     if not customer:
-        raise HTTPException(status_code=401, detail="Please sign in with your phone number and email")
+        raise HTTPException(status_code=401, detail="Please log in first")
     return customer
 
 
@@ -71,7 +79,57 @@ def require_customer(request: Request, conn) -> dict:
 def account_status(request: Request):
     with get_db() as conn:
         customer = current_customer(request, conn)
-    return {"otp_enabled": otp_enabled(), "customer": public_customer(customer) if customer else None}
+    return {
+        "sign_in_enabled": sign_in_enabled(),
+        "google_client_id": google_client_id(),
+        "otp_enabled": otp_enabled(),
+        "customer": public_customer(customer) if customer else None,
+    }
+
+
+def _set_customer_cookie(response: Response, customer_id: int):
+    response.set_cookie(
+        CUSTOMER_COOKIE, create_customer_token(customer_id), max_age=CUSTOMER_SESSION_DAYS * 86400,
+        httponly=True, samesite="lax", secure=IS_SECURE_COOKIE,
+    )
+
+
+@router.post("/api/account/google")
+def google_sign_in(req: GoogleRequest, response: Response):
+    """Log in or sign up with a Google account. New customers add their phone number afterwards."""
+    if not google_client_id():
+        raise HTTPException(status_code=503, detail="Google sign-in is not switched on yet")
+    try:
+        g = verify_google_credential(req.credential)
+    except ValueError as e:
+        if str(e) == "unreachable":
+            raise HTTPException(status_code=502, detail="Could not reach Google. Please try again")
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again")
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM customers WHERE google_sub = ? ORDER BY id LIMIT 1", (g["sub"],)).fetchone()
+        if not row:
+            # Same Gmail already on file (an earlier sign-in, or a chef the admin added): use that account
+            matches = [dict(r) for r in conn.execute(
+                "SELECT * FROM customers WHERE LOWER(TRIM(email)) = ? ORDER BY id", (g["email"],)).fetchall()]
+            matches.sort(key=lambda c: (c.get("status") == "Removed", not public_customer(c)["is_chef"], c["id"]))
+            row = matches[0] if matches else None
+        if row:
+            customer = dict(row)
+            conn.execute(
+                "UPDATE customers SET google_sub = ?, email = ?, name = CASE WHEN TRIM(COALESCE(name, '')) = '' THEN ? ELSE name END WHERE id = ?",
+                (g["sub"], g["email"], g["name"], customer["id"]),
+            )
+        else:
+            cur = conn.execute(
+                "INSERT INTO customers (name, phone, email, google_sub, customer_type, total_orders, lifetime_value, status) "
+                "VALUES (?, ?, ?, ?, 'Retail', 0, 0, 'Active')",
+                # phone must be unique and filled; a placeholder holds the place until they add their number
+                (g["name"], f"pending:{g['sub']}", g["email"], g["sub"]),
+            )
+            customer = {"id": cur.lastrowid}
+        customer = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (customer["id"],)).fetchone())
+    _set_customer_cookie(response, customer["id"])
+    return {"success": True, "customer": public_customer(customer)}
 
 
 @router.post("/api/account/send-otp")
@@ -161,10 +219,7 @@ def verify_otp(req: VerifyRequest, response: Response):
             )
             customer = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (cur.lastrowid,)).fetchone())
 
-    response.set_cookie(
-        CUSTOMER_COOKIE, create_customer_token(customer["id"]), max_age=CUSTOMER_SESSION_DAYS * 86400,
-        httponly=True, samesite="lax", secure=IS_SECURE_COOKIE,
-    )
+    _set_customer_cookie(response, customer["id"])
     return {"success": True, "customer": public_customer(customer)}
 
 
@@ -175,7 +230,7 @@ def customer_logout(response: Response):
 
 
 @router.post("/api/account/profile")
-def save_profile(req: ProfileRequest, request: Request):
+def save_profile(req: ProfileRequest, request: Request, response: Response):
     name, address, pincode = req.name.strip(), req.address.strip(), req.pincode.strip()
     if not name or not address:
         raise HTTPException(status_code=400, detail="Name and address are required")
@@ -183,9 +238,32 @@ def save_profile(req: ProfileRequest, request: Request):
         raise HTTPException(status_code=400, detail="Enter a 6-digit pincode")
     with get_db() as conn:
         customer = require_customer(request, conn)
+        phone = customer.get("phone") or ""
+        if req.phone is not None and phone_digits(req.phone) != phone_digits(phone):
+            digits = phone_digits(req.phone)
+            if not digits:
+                raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number")
+            other = find_customer_by_phone(conn, digits)
+            if other and other["id"] != customer["id"]:
+                if public_customer(other)["is_chef"]:
+                    raise HTTPException(status_code=409, detail="This number belongs to a chef account. Please ask DJ Microgreens to add your Gmail to it, then log in again")
+                if other.get("google_sub") or clean_email(other.get("email")):
+                    raise HTTPException(status_code=409, detail="This number is already linked to another account. Please contact DJ Microgreens on +91 99407 65140")
+                # An earlier guest order with this number: join it to this login so its order history carries over
+                for table in ("orders", "subscriptions"):
+                    conn.execute(f"UPDATE {table} SET customer_id = ? WHERE customer_id = ?", (other["id"], customer["id"]))
+                conn.execute("UPDATE customers SET google_sub = NULL, email = '' WHERE id = ?", (customer["id"],))
+                conn.execute("UPDATE customers SET google_sub = ?, email = ? WHERE id = ?",
+                             (customer.get("google_sub"), customer.get("email") or "", other["id"]))
+                conn.execute("DELETE FROM customers WHERE id = ?", (customer["id"],))
+                customer = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (other["id"],)).fetchone())
+                _set_customer_cookie(response, customer["id"])
+            phone = normalize_phone(digits)
+        if not phone_digits(phone):
+            raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number")
         conn.execute(
-            "UPDATE customers SET name = ?, address = ?, locality = ?, pincode = ? WHERE id = ?",
-            (name, address, (req.locality or "").strip(), pincode, customer["id"]),
+            "UPDATE customers SET phone = ?, name = ?, address = ?, locality = ?, pincode = ? WHERE id = ?",
+            (phone, name, address, (req.locality or "").strip(), pincode, customer["id"]),
         )
         updated = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (customer["id"],)).fetchone())
     return {"success": True, "customer": public_customer(updated)}
@@ -234,7 +312,7 @@ def chef_place_order(req: ChefOrderRequest, request: Request):
     with get_db() as conn:
         customer = require_customer(request, conn)
     if not public_customer(customer)["is_chef"]:
-        raise HTTPException(status_code=403, detail="This phone number is not registered as a chef account")
+        raise HTTPException(status_code=403, detail="This account is not registered as a chef account")
     if not req.items:
         raise HTTPException(status_code=400, detail="Please select at least one item")
     try:
