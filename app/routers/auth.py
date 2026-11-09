@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -71,16 +72,34 @@ def _validate_password(password: str):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
 
+def _simplify(text: str) -> str:
+    """'K.P Dandapani' -> 'kpdandapani', 'Sales & B2B Manager' -> 'salesb2bmanager'."""
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+
+def _find_login_user(conn, entered: str) -> Optional[dict]:
+    """Match what was typed against the username, the person's name or the role."""
+    key = _simplify(entered)
+    if not key:
+        return None
+    users = [dict(r) for r in conn.execute("SELECT * FROM users WHERE is_active = 1").fetchall()]
+    for field in ("username", "full_name", "role"):
+        matches = [u for u in users if u.get(field) and _simplify(u[field]) == key]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
 @router.post("/login")
 def login(req: LoginRequest, response: Response):
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT * FROM users WHERE lower(username) = lower(?) AND is_active = 1",
-            (req.username.strip(),),
-        ).fetchone()
-    if not row or not verify_password(req.password, row["password_hash"]):
+        user = _find_login_user(conn, req.username)
+    password_ok = user and (
+        verify_password(req.password, user["password_hash"])
+        or verify_password(req.password.strip(), user["password_hash"])  # stray space from a phone keyboard
+    )
+    if not password_ok:
         raise HTTPException(status_code=401, detail="Wrong username or password")
-    user = dict(row)
     _set_session(response, user)
     return {"success": True, "user": public_user(user)}
 
