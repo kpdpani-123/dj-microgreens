@@ -509,7 +509,7 @@ function toggleCartDrawer(open) {
 // ----------------- CHECKOUT & ORDERS -----------------
 function openCheckoutModal() {
   toggleCartDrawer(false);
-  if (!requireSignedIn('checkout', 'Please sign in with your mobile number and email to place your order.')) return;
+  if (!requireSignedIn('checkout', 'Please log in to place your order.')) return;
   prefillCheckoutFromAccount();
   document.getElementById('checkoutModal').classList.remove('hidden');
   lucide.createIcons();
@@ -743,7 +743,7 @@ let selectedSubPlan = null;
 function startSubscriptionModal(planName, freq, price) {
   selectedSubPlan = { planName, freq, price };
   
-  if (!requireSignedIn(() => startSubscriptionModal(planName, freq, price), 'Please sign in with your mobile number and email to start a subscription.')) return;
+  if (!requireSignedIn(() => startSubscriptionModal(planName, freq, price), 'Please log in to start a subscription.')) return;
   let custName, custPhone, custAddress;
   const me = accountState.customer;
   if (me) {
@@ -796,7 +796,7 @@ async function loadCustomerSubscriptions() {
   const phoneLabel = document.getElementById('subFilterPhone');
   if (phoneLabel) phoneLabel.textContent = accountState.customer ? accountState.customer.phone : 'Not signed in';
   if (!accountState.customer) {
-    container.innerHTML = `<p class="text-xs text-slate-400">${accountState.otp_enabled ? '<button onclick="openCustomerAccountModal()" class="text-emerald-700 font-bold underline">Sign in</button> to see and manage your subscriptions.' : 'No active subscriptions found.'}</p>`;
+    container.innerHTML = `<p class="text-xs text-slate-400">${accountState.sign_in_enabled ? '<a href="/account?next=subscriptions" class="text-emerald-700 font-bold underline">Log in</a> to see and manage your subscriptions.' : 'No active subscriptions found.'}</p>`;
     return;
   }
 
@@ -876,6 +876,10 @@ function toggleAccountDrawer(open) {
 }
 
 function openCustomerAccountModal() {
+  if (accountState.sign_in_enabled && !accountState.customer) {
+    location.href = '/account?next=account';
+    return;
+  }
   document.getElementById('acctSignInReason').classList.add('hidden');
   toggleAccountDrawer(true);
 }
@@ -950,20 +954,28 @@ async function reorderPreviousItems(orderNum) {
   }
 }
 
-// ----------------- CUSTOMER ACCOUNT: PHONE + CODE SENT BY EMAIL -----------------
-let accountState = { otp_enabled: false, customer: null };
-let afterSignIn = null;   // what to do once signed in ('checkout' or a function)
-let otpPhone = '';
+// ----------------- CUSTOMER ACCOUNT (login / sign-up happens on /account) -----------------
+let accountState = { sign_in_enabled: false, customer: null };
+let afterSignIn = null;   // what to do once details are complete ('checkout' or a function)
 
 async function loadAccountStatus() {
   try {
     const res = await fetch('/api/account/status');
     accountState = await res.json();
   } catch (err) {
-    accountState = { otp_enabled: false, customer: null };
+    accountState = { sign_in_enabled: false, customer: null };
   }
   updateAccountButton();
   loadCustomerSubscriptions();
+
+  // Back from the /account page: carry on with what the customer was doing
+  const resume = new URLSearchParams(location.search).get('resume');
+  if (resume) {
+    history.replaceState(null, '', location.pathname);
+    if (resume === 'checkout' && cart.length) openCheckoutModal();
+    else if (resume === 'subscriptions') switchTab('subscriptions');
+    else if (resume === 'account') openCustomerAccountModal();
+  }
 }
 document.addEventListener('DOMContentLoaded', loadAccountStatus);
 
@@ -979,9 +991,13 @@ function escapeHtml(s) {
 
 // Returns true when the customer may continue; otherwise opens sign-in and remembers what to do next.
 function requireSignedIn(next, reason) {
-  if (!accountState.otp_enabled) return true;
+  if (!accountState.sign_in_enabled) return true;
   const c = accountState.customer;
   if (c && c.profile_complete) return true;
+  if (!c) {
+    location.href = '/account?next=' + (next === 'checkout' ? 'checkout' : 'subscriptions');
+    return false;
+  }
   afterSignIn = next;
   const r = document.getElementById('acctSignInReason');
   r.textContent = c ? 'Please add your name and address to continue.' : reason;
@@ -1022,17 +1038,18 @@ function renderAccount() {
   const initials = document.getElementById('acctInitials');
   if (!c) {
     document.getElementById('acctHeaderName').textContent = 'My Account';
-    document.getElementById('acctHeaderSub').textContent = accountState.otp_enabled ? 'Sign in with your mobile number and email' : 'Guest';
+    const on = accountState.sign_in_enabled;
+    document.getElementById('acctHeaderSub').textContent = on ? 'Login or sign up' : 'Guest';
     initials.innerHTML = '<i data-lucide="user" class="w-4 h-4"></i>';
     showAcctSection('acctSignIn');
-    document.getElementById('acctOtpOff').classList.toggle('hidden', accountState.otp_enabled);
-    document.getElementById('acctPhoneForm').classList.toggle('hidden', !accountState.otp_enabled || !!otpPhone);
-    document.getElementById('acctOtpForm').classList.toggle('hidden', !accountState.otp_enabled || !otpPhone);
+    document.getElementById('acctOtpOff').classList.toggle('hidden', on);
+    document.getElementById('acctLoginLink').classList.toggle('hidden', !on);
+    document.getElementById('acctLoginHint').classList.toggle('hidden', !on);
     lucide.createIcons();
     return;
   }
   document.getElementById('acctHeaderName').textContent = c.name || 'New customer';
-  document.getElementById('acctHeaderSub').textContent = c.is_chef ? `${c.phone} • Chef account` : c.phone;
+  document.getElementById('acctHeaderSub').textContent = [c.phone || c.email, c.is_chef ? 'Chef account' : ''].filter(Boolean).join(' • ');
   initials.textContent = (c.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
   if (!c.profile_complete) {
     showProfileForm(false);
@@ -1048,6 +1065,7 @@ function renderAccount() {
 
 function showProfileForm(editing) {
   const c = accountState.customer || {};
+  document.getElementById('profPhone').value = c.phone || '';
   document.getElementById('profName').value = c.name || '';
   document.getElementById('profEmail').value = c.email || '';
   document.getElementById('profAddress').value = c.address || '';
@@ -1071,56 +1089,11 @@ async function postJson(url, body) {
   return data;
 }
 
-async function requestOtp(event) {
-  if (event) event.preventDefault();
-  const phone = otpPhone || document.getElementById('acctPhone').value;
-  const btn = document.getElementById(otpPhone ? 'acctResendBtn' : 'acctSendOtpBtn');
-  btn.disabled = true;
-  try {
-    const data = await postJson('/api/account/send-otp', { phone, email: document.getElementById('acctEmail').value });
-    otpPhone = phone;
-    document.getElementById('acctOtpPhone').textContent = data.sent_to;
-    document.getElementById('acctOtp').value = '';
-    renderAccount();
-    setAcctMsg('acctMsg', data.message, true);
-    document.getElementById('acctOtp').focus();
-  } catch (err) {
-    setAcctMsg('acctMsg', err.message, false);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function changeAcctPhone() {
-  otpPhone = '';
-  document.getElementById('acctMsg').classList.add('hidden');
-  renderAccount();
-}
-
-async function submitOtp(event) {
-  event.preventDefault();
-  const btn = document.getElementById('acctVerifyBtn');
-  btn.disabled = true;
-  try {
-    const data = await postJson('/api/account/verify-otp', { phone: otpPhone, otp: document.getElementById('acctOtp').value });
-    accountState.customer = data.customer;
-    otpPhone = '';
-    document.getElementById('acctMsg').classList.add('hidden');
-    document.getElementById('acctSignInReason').classList.add('hidden');
-    updateAccountButton();
-    renderAccount();
-    if (data.customer.profile_complete) continueAfterSignIn();
-  } catch (err) {
-    setAcctMsg('acctMsg', err.message, false);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
 async function saveProfile(event) {
   event.preventDefault();
   try {
     const data = await postJson('/api/account/profile', {
+      phone: document.getElementById('profPhone').value,
       name: document.getElementById('profName').value,
       email: document.getElementById('profEmail').value,
       address: document.getElementById('profAddress').value,
@@ -1139,7 +1112,6 @@ async function saveProfile(event) {
 async function customerSignOut() {
   await fetch('/api/account/logout', { method: 'POST' });
   accountState.customer = null;
-  otpPhone = '';
   ['chkName', 'chkPhone', 'chkEmail', 'chkAddress', 'chkLocality', 'chkPincode'].forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; el.readOnly = false; } });
   updateAccountButton();
   renderAccount();

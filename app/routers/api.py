@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import random
 
 from app.database import get_db
-from app.customer_auth import current_customer, otp_enabled, find_customer_by_phone, normalize_phone, site_url
+from app.customer_auth import current_customer, sign_in_enabled, find_customer_by_phone, normalize_phone, site_url, phone_digits
 
 router = APIRouter(prefix="/api", tags=["Customer API"])
 
@@ -267,10 +267,12 @@ def create_order(req: OrderCreateRequest, request: Request):
     with get_db() as conn:
         cursor = conn.cursor()
         signed_in = current_customer(request, conn)
-        if otp_enabled() and not signed_in:
-            raise HTTPException(status_code=401, detail="Please sign in with your phone number to order")
+        if sign_in_enabled() and not signed_in:
+            raise HTTPException(status_code=401, detail="Please log in to place your order")
         if signed_in:
             # The signed-in account decides who the order belongs to
+            if not phone_digits(signed_in.get("phone") or ""):
+                raise HTTPException(status_code=400, detail="Please add your mobile number to your account first")
             req.customer_phone = signed_in["phone"]
         
         # 1. Calculate pricing
@@ -481,9 +483,11 @@ def create_subscription(req: SubscriptionCreateRequest, request: Request):
     with get_db() as conn:
         cursor = conn.cursor()
         signed_in = current_customer(request, conn)
-        if otp_enabled() and not signed_in:
-            raise HTTPException(status_code=401, detail="Please sign in with your phone number to subscribe")
+        if sign_in_enabled() and not signed_in:
+            raise HTTPException(status_code=401, detail="Please log in to subscribe")
         if signed_in:
+            if not phone_digits(signed_in.get("phone") or ""):
+                raise HTTPException(status_code=400, detail="Please add your mobile number to your account first")
             req.customer_phone = signed_in["phone"]
         today = datetime.now()
         today_str = today.strftime("%Y-%m-%d")
@@ -538,7 +542,7 @@ def toggle_subscription_status(sub_id: int, request: Request, action: str = Quer
         if not sub:
             raise HTTPException(status_code=404, detail="Subscription not found")
         signed_in = current_customer(request, conn)
-        if otp_enabled() and (not signed_in or signed_in["id"] != sub["customer_id"]):
+        if sign_in_enabled() and (not signed_in or signed_in["id"] != sub["customer_id"]):
             raise HTTPException(status_code=403, detail="Please sign in to manage your subscription")
 
         today_str = datetime.now().strftime("%Y-%m-%d")

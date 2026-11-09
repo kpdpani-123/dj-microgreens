@@ -1,12 +1,15 @@
-"""Customer and chef login: phone number, verified by a code sent to their email (from Gmail)."""
+"""Customer and chef login: "Continue with Google", or a code sent to their email from the shop's Gmail."""
 import base64
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
 import smtplib
 import time
+import urllib.parse
+import urllib.request
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Optional
@@ -24,6 +27,8 @@ OTP_MAX_ATTEMPTS = 5
 # ----------------- PHONE NUMBERS -----------------
 def phone_digits(phone: str) -> Optional[str]:
     """The 10-digit Indian mobile number, or None. Accepts +91, 91 or 0 in front."""
+    if (phone or "").startswith("pending:"):  # Google sign-up that has not added a number yet
+        return None
     digits = re.sub(r"\D", "", phone or "")
     if len(digits) == 12 and digits.startswith("91"):
         digits = digits[2:]
@@ -49,6 +54,46 @@ def find_customer_by_phone(conn, phone: str) -> Optional[dict]:
         if phone_digits(row["phone"]) == target:
             return dict(row)
     return None
+
+
+# ----------------- CONTINUE WITH GOOGLE -----------------
+GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
+
+
+def google_client_id() -> str:
+    return os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+
+
+def sign_in_enabled() -> bool:
+    """Customers must sign in to order once any sign-in method is set up."""
+    return bool(google_client_id()) or otp_enabled()
+
+
+def _google_tokeninfo(credential: str) -> dict:
+    url = "https://oauth2.googleapis.com/tokeninfo?" + urllib.parse.urlencode({"id_token": credential})
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "dj-microgreens"}), timeout=15) as resp:
+        return json.loads(resp.read().decode() or "{}")
+
+
+def verify_google_credential(credential: str) -> dict:
+    """Check a Google sign-in token. Returns {sub, email, name}; raises ValueError if it is not valid for this site."""
+    client_id = google_client_id()
+    if not client_id or not credential or len(credential) > 5000:
+        raise ValueError("missing")
+    try:
+        info = _google_tokeninfo(credential)
+    except Exception as e:
+        print(f"Google token check failed: {e!r}")
+        raise ValueError("unreachable")
+    email = clean_email(info.get("email"))
+    try:
+        expires = int(info.get("exp", 0))
+    except (TypeError, ValueError):
+        expires = 0
+    if (info.get("aud") != client_id or info.get("iss") not in GOOGLE_ISSUERS or not info.get("sub")
+            or not email or str(info.get("email_verified")).lower() != "true" or expires < time.time()):
+        raise ValueError("invalid")
+    return {"sub": str(info["sub"]), "email": email, "name": (info.get("name") or "").strip()}
 
 
 # ----------------- EMAIL CODES (sent from Gmail) -----------------
@@ -144,7 +189,7 @@ def public_customer(c: dict) -> dict:
     return {
         "id": c["id"],
         "name": c.get("name") or "",
-        "phone": c.get("phone") or "",
+        "phone": normalize_phone(c.get("phone") or "") or "",
         "email": c.get("email") or "",
         "address": c.get("address") or "",
         "locality": c.get("locality") or "",
@@ -152,7 +197,8 @@ def public_customer(c: dict) -> dict:
         "customer_type": c.get("customer_type") or "Retail",
         "credit_terms": c.get("credit_terms") or "Net 15",
         "is_chef": is_chef,
-        "profile_complete": bool((c.get("name") or "").strip() and (c.get("address") or "").strip() and (c.get("pincode") or "").strip()),
+        "profile_complete": bool(phone_digits(c.get("phone") or "") and (c.get("name") or "").strip()
+                                 and (c.get("address") or "").strip() and (c.get("pincode") or "").strip()),
     }
 
 
