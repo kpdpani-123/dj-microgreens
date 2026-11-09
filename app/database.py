@@ -556,6 +556,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS otp_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT NOT NULL,
+            email TEXT,
             session_id TEXT NOT NULL,
             created_at REAL NOT NULL,
             attempts INTEGER DEFAULT 0,
@@ -565,6 +566,7 @@ def init_db():
 
         # Columns added after the first release
         _add_missing_columns(cursor, "inventory", {"supplier_name": "TEXT"})
+        _add_missing_columns(cursor, "otp_requests", {"email": "TEXT"})
         _add_missing_columns(cursor, "customers", {"credit_terms": "TEXT DEFAULT 'Net 15'"})
 
 

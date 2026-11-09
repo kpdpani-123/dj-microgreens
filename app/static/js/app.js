@@ -509,7 +509,7 @@ function toggleCartDrawer(open) {
 // ----------------- CHECKOUT & ORDERS -----------------
 function openCheckoutModal() {
   toggleCartDrawer(false);
-  if (!requireSignedIn('checkout', 'Please sign in with your mobile number to place your order.')) return;
+  if (!requireSignedIn('checkout', 'Please sign in with your mobile number and email to place your order.')) return;
   prefillCheckoutFromAccount();
   document.getElementById('checkoutModal').classList.remove('hidden');
   lucide.createIcons();
@@ -743,7 +743,7 @@ let selectedSubPlan = null;
 function startSubscriptionModal(planName, freq, price) {
   selectedSubPlan = { planName, freq, price };
   
-  if (!requireSignedIn(() => startSubscriptionModal(planName, freq, price), 'Please sign in with your mobile number to start a subscription.')) return;
+  if (!requireSignedIn(() => startSubscriptionModal(planName, freq, price), 'Please sign in with your mobile number and email to start a subscription.')) return;
   let custName, custPhone, custAddress;
   const me = accountState.customer;
   if (me) {
@@ -950,7 +950,7 @@ async function reorderPreviousItems(orderNum) {
   }
 }
 
-// ----------------- CUSTOMER ACCOUNT: PHONE + OTP SIGN-IN -----------------
+// ----------------- CUSTOMER ACCOUNT: PHONE + CODE SENT BY EMAIL -----------------
 let accountState = { otp_enabled: false, customer: null };
 let afterSignIn = null;   // what to do once signed in ('checkout' or a function)
 let otpPhone = '';
@@ -1022,7 +1022,7 @@ function renderAccount() {
   const initials = document.getElementById('acctInitials');
   if (!c) {
     document.getElementById('acctHeaderName').textContent = 'My Account';
-    document.getElementById('acctHeaderSub').textContent = accountState.otp_enabled ? 'Sign in with your mobile number' : 'Guest';
+    document.getElementById('acctHeaderSub').textContent = accountState.otp_enabled ? 'Sign in with your mobile number and email' : 'Guest';
     initials.innerHTML = '<i data-lucide="user" class="w-4 h-4"></i>';
     showAcctSection('acctSignIn');
     document.getElementById('acctOtpOff').classList.toggle('hidden', accountState.otp_enabled);
@@ -1077,9 +1077,9 @@ async function requestOtp(event) {
   const btn = document.getElementById(otpPhone ? 'acctResendBtn' : 'acctSendOtpBtn');
   btn.disabled = true;
   try {
-    const data = await postJson('/api/account/send-otp', { phone });
+    const data = await postJson('/api/account/send-otp', { phone, email: document.getElementById('acctEmail').value });
     otpPhone = phone;
-    document.getElementById('acctOtpPhone').textContent = data.message.replace('OTP sent to ', '');
+    document.getElementById('acctOtpPhone').textContent = data.sent_to;
     document.getElementById('acctOtp').value = '';
     renderAccount();
     setAcctMsg('acctMsg', data.message, true);
