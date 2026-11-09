@@ -1,3 +1,4 @@
+import hmac
 import json
 import time
 from datetime import datetime
@@ -14,15 +15,18 @@ from app.customer_auth import (
     OTP_MAX_PER_HOUR,
     OTP_RESEND_WAIT_SECONDS,
     OTP_VALID_SECONDS,
-    check_sms_otp,
+    clean_email,
     create_customer_token,
     current_customer,
     find_customer_by_phone,
+    hash_code,
+    mask_email,
+    new_code,
     normalize_phone,
     otp_enabled,
     phone_digits,
     public_customer,
-    send_sms_otp,
+    send_email_code,
 )
 from app.database import get_db
 from app.routers.admin import B2BOrderCreateRequest, place_b2b_order, wholesale_catalog
@@ -32,6 +36,7 @@ router = APIRouter(tags=["Customer Accounts"])
 
 class PhoneRequest(BaseModel):
     phone: str
+    email: Optional[str] = ""
 
 
 class VerifyRequest(BaseModel):
@@ -57,11 +62,11 @@ class ChefOrderRequest(BaseModel):
 def require_customer(request: Request, conn) -> dict:
     customer = current_customer(request, conn)
     if not customer:
-        raise HTTPException(status_code=401, detail="Please sign in with your phone number")
+        raise HTTPException(status_code=401, detail="Please sign in with your phone number and email")
     return customer
 
 
-# ----------------- SIGN IN WITH PHONE + OTP -----------------
+# ----------------- SIGN IN: PHONE NUMBER + CODE SENT BY EMAIL -----------------
 @router.get("/api/account/status")
 def account_status(request: Request):
     with get_db() as conn:
@@ -72,62 +77,87 @@ def account_status(request: Request):
 @router.post("/api/account/send-otp")
 def send_otp(req: PhoneRequest):
     if not otp_enabled():
-        raise HTTPException(status_code=503, detail="Phone sign-in is not switched on yet")
+        raise HTTPException(status_code=503, detail="Sign-in is not switched on yet")
     digits = phone_digits(req.phone)
     if not digits:
         raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number")
     now = time.time()
     with get_db() as conn:
+        customer = find_customer_by_phone(conn, digits)
+        saved_email = clean_email(customer.get("email")) if customer else None
+        # A number that already has an email always gets its code there,
+        # so nobody can take over an account by typing a different email.
+        email = saved_email or clean_email(req.email)
+        if not email:
+            raise HTTPException(status_code=400, detail="Enter a valid email address")
         recent = conn.execute(
-            "SELECT created_at FROM otp_requests WHERE phone = ? AND created_at > ? ORDER BY created_at DESC",
-            (digits, now - 3600),
+            "SELECT created_at FROM otp_requests WHERE (phone = ? OR email = ?) AND created_at > ? ORDER BY created_at DESC",
+            (digits, email, now - 3600),
         ).fetchall()
         if recent and now - recent[0]["created_at"] < OTP_RESEND_WAIT_SECONDS:
-            raise HTTPException(status_code=429, detail="Please wait 30 seconds before asking for another OTP")
+            raise HTTPException(status_code=429, detail="Please wait 30 seconds before asking for another code")
         if len(recent) >= OTP_MAX_PER_HOUR:
-            raise HTTPException(status_code=429, detail="Too many OTP requests. Please try again in an hour")
+            raise HTTPException(status_code=429, detail="Too many code requests. Please try again in an hour")
+        request_key = new_code() + new_code()
+        code = new_code()
+        # Only a keyed hash of the code is stored
+        cur = conn.execute(
+            "INSERT INTO otp_requests (phone, email, session_id, created_at) VALUES (?, ?, ?, ?)",
+            (digits, email, f"{request_key}:{hash_code(code, request_key)}", now),
+        )
+        request_id = cur.lastrowid
     try:
-        session_id = send_sms_otp(digits)
+        send_email_code(email, code)
     except RuntimeError:
-        raise HTTPException(status_code=502, detail="Could not send the OTP right now. Please try again shortly")
-    with get_db() as conn:
-        conn.execute("INSERT INTO otp_requests (phone, session_id, created_at) VALUES (?, ?, ?)", (digits, session_id, now))
-    return {"success": True, "message": f"OTP sent to +91 {digits[:5]} {digits[5:]}"}
+        with get_db() as conn:
+            conn.execute("DELETE FROM otp_requests WHERE id = ?", (request_id,))
+        raise HTTPException(status_code=502, detail="Could not send the email right now. Please try again shortly")
+    shown = mask_email(email) if saved_email else email
+    note = " (the email saved on this account)" if saved_email and saved_email != clean_email(req.email) else ""
+    return {"success": True, "sent_to": shown, "message": f"Code sent to {shown}{note}"}
 
 
 @router.post("/api/account/verify-otp")
 def verify_otp(req: VerifyRequest, response: Response):
     if not otp_enabled():
-        raise HTTPException(status_code=503, detail="Phone sign-in is not switched on yet")
+        raise HTTPException(status_code=503, detail="Sign-in is not switched on yet")
     digits = phone_digits(req.phone)
-    otp = "".join(ch for ch in req.otp if ch.isdigit())
-    if not digits or not (4 <= len(otp) <= 8):
-        raise HTTPException(status_code=400, detail="Enter the OTP from the SMS")
+    code = "".join(ch for ch in req.otp if ch.isdigit())
+    if not digits or len(code) != 6:
+        raise HTTPException(status_code=400, detail="Enter the 6-digit code from the email")
     with get_db() as conn:
         pending = conn.execute(
             "SELECT * FROM otp_requests WHERE phone = ? AND verified = 0 AND created_at > ? ORDER BY created_at DESC LIMIT 1",
             (digits, time.time() - OTP_VALID_SECONDS),
         ).fetchone()
         if not pending:
-            raise HTTPException(status_code=400, detail="This OTP has expired. Please ask for a new one")
+            raise HTTPException(status_code=400, detail="This code has expired. Please ask for a new one")
         if pending["attempts"] >= OTP_MAX_ATTEMPTS:
-            raise HTTPException(status_code=429, detail="Too many wrong tries. Please ask for a new OTP")
+            raise HTTPException(status_code=429, detail="Too many wrong tries. Please ask for a new code")
+        # Count the try in its own step, so a wrong code cannot undo the count
         conn.execute("UPDATE otp_requests SET attempts = attempts + 1 WHERE id = ?", (pending["id"],))
-        session_id, request_id = pending["session_id"], pending["id"]
+        pending = dict(pending)
 
-    if not check_sms_otp(session_id, otp):
-        raise HTTPException(status_code=400, detail="Wrong OTP. Please check the SMS and try again")
+    request_key, _, expected = (pending["session_id"] or "").partition(":")
+    if not expected or not hmac.compare_digest(hash_code(code, request_key), expected):
+        raise HTTPException(status_code=400, detail="Wrong code. Please check the email and try again")
 
     with get_db() as conn:
-        conn.execute("UPDATE otp_requests SET verified = 1 WHERE id = ?", (request_id,))
+        # Mark used only if still unused, so the same code cannot sign in twice
+        used = conn.execute("UPDATE otp_requests SET verified = 1 WHERE id = ? AND verified = 0", (pending["id"],))
+        if getattr(used, "rowcount", 1) == 0:
+            raise HTTPException(status_code=400, detail="This code has already been used. Please ask for a new one")
+        email = pending["email"]
         customer = find_customer_by_phone(conn, digits)
         if customer:
-            conn.execute("UPDATE customers SET phone = ? WHERE id = ?", (normalize_phone(digits), customer["id"]))
-            customer["phone"] = normalize_phone(digits)
+            new_email = customer.get("email") if clean_email(customer.get("email")) else email
+            conn.execute("UPDATE customers SET phone = ?, email = ? WHERE id = ?",
+                         (normalize_phone(digits), new_email, customer["id"]))
+            customer.update(phone=normalize_phone(digits), email=new_email)
         else:
             cur = conn.execute(
-                "INSERT INTO customers (name, phone, customer_type, total_orders, lifetime_value, status) VALUES ('', ?, 'Retail', 0, 0, 'Active')",
-                (normalize_phone(digits),),
+                "INSERT INTO customers (name, phone, email, customer_type, total_orders, lifetime_value, status) VALUES ('', ?, ?, 'Retail', 0, 0, 'Active')",
+                (normalize_phone(digits), email),
             )
             customer = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (cur.lastrowid,)).fetchone())
 
@@ -154,8 +184,8 @@ def save_profile(req: ProfileRequest, request: Request):
     with get_db() as conn:
         customer = require_customer(request, conn)
         conn.execute(
-            "UPDATE customers SET name = ?, email = ?, address = ?, locality = ?, pincode = ? WHERE id = ?",
-            (name, (req.email or "").strip(), address, (req.locality or "").strip(), pincode, customer["id"]),
+            "UPDATE customers SET name = ?, address = ?, locality = ?, pincode = ? WHERE id = ?",
+            (name, address, (req.locality or "").strip(), pincode, customer["id"]),
         )
         updated = dict(conn.execute("SELECT * FROM customers WHERE id = ?", (customer["id"],)).fetchone())
     return {"success": True, "customer": public_customer(updated)}

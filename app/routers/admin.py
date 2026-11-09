@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.customer_auth import normalize_phone, find_customer_by_phone, site_url
+from app.customer_auth import normalize_phone, find_customer_by_phone, site_url, clean_email
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Management API"])
 
@@ -615,6 +615,10 @@ def _clean_chef(req: ChefAccountRequest) -> dict:
         d["credit_terms"] = "Net 15"
     for key in ("email", "address", "locality", "pincode"):
         d[key] = (d.get(key) or "").strip()
+    if d["email"]:
+        d["email"] = clean_email(d["email"])
+        if not d["email"]:
+            raise HTTPException(status_code=400, detail="Enter a valid email address, or leave it blank")
     return d
 
 @router.post("/b2b/chefs")
@@ -628,7 +632,7 @@ def add_chef_account(req: ChefAccountRequest, request: Request):
             # Phone already used by a retail customer or a removed chef: turn it into this chef account
             conn.execute("""UPDATE customers SET name = ?, phone = ?, email = ?, address = ?, locality = ?, pincode = ?,
                 customer_type = ?, credit_terms = ?, status = 'Restaurant' WHERE id = ?""",
-                (d["name"], d["phone"], d["email"], d["address"], d["locality"], d["pincode"],
+                (d["name"], d["phone"], d["email"] or existing.get("email") or "", d["address"], d["locality"], d["pincode"],
                  d["customer_type"], d["credit_terms"], existing["id"]))
             chef_id = existing["id"]
         else:

@@ -1,14 +1,14 @@
-"""Customer and chef login by phone number + SMS OTP (sent by 2Factor.in)."""
+"""Customer and chef login: phone number, verified by a code sent to their email (from Gmail)."""
 import base64
 import hashlib
 import hmac
-import json
 import os
 import re
+import secrets
+import smtplib
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
+from email.message import EmailMessage
+from email.utils import formataddr
 from typing import Optional
 
 CUSTOMER_COOKIE = "dj_customer"
@@ -51,40 +51,60 @@ def find_customer_by_phone(conn, phone: str) -> Optional[dict]:
     return None
 
 
-# ----------------- 2FACTOR.IN SMS OTP -----------------
+# ----------------- EMAIL CODES (sent from Gmail) -----------------
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 def otp_enabled() -> bool:
-    return bool(os.environ.get("TWOFACTOR_API_KEY"))
+    """Sign-in is on once the Gmail address and its app password are set in Vercel."""
+    return bool(os.environ.get("GMAIL_ADDRESS") and os.environ.get("GMAIL_APP_PASSWORD"))
 
 
-def _twofactor_get(path: str) -> dict:
-    key = os.environ.get("TWOFACTOR_API_KEY", "")
-    url = f"https://2factor.in/API/V1/{urllib.parse.quote(key)}/{path}"
+def clean_email(email: str) -> Optional[str]:
+    email = (email or "").strip().lower()
+    return email if EMAIL_RE.match(email) and len(email) <= 254 else None
+
+
+def mask_email(email: str) -> str:
+    """'kpdandapani@gmail.com' -> 'kp*******@gmail.com'."""
+    name, _, domain = (email or "").partition("@")
+    return f"{name[:2]}{'*' * max(len(name) - 2, 1)}@{domain}"
+
+
+def new_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_code(code: str, request_key: str) -> str:
+    from app.auth import get_secret_key
+    return hmac.new(get_secret_key().encode(), f"code:{request_key}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def send_email_code(to_email: str, code: str) -> None:
+    """Email the sign-in code from the shop's Gmail. Raises RuntimeError on failure."""
+    sender = os.environ.get("GMAIL_ADDRESS", "").strip()
+    password = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+    msg = EmailMessage()
+    msg["Subject"] = f"{code} is your DJ Microgreens sign-in code"
+    msg["From"] = formataddr(("DJ Microgreens", sender))
+    msg["To"] = to_email
+    msg.set_content(
+        f"Your DJ Microgreens sign-in code is {code}\n\n"
+        f"It works for {OTP_VALID_SECONDS // 60} minutes. If you did not ask for it, you can ignore this email.\n\n"
+        "DJ Microgreens, Chennai\nK.P Dandapani · +91 99407 65140"
+    )
+    msg.add_alternative(f"""<div style="font-family:Arial,sans-serif;color:#0f172a">
+<p>Your DJ Microgreens sign-in code is</p>
+<p style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#14532d">{code}</p>
+<p>It works for {OTP_VALID_SECONDS // 60} minutes. If you did not ask for it, you can ignore this email.</p>
+<p style="color:#64748b;font-size:12px">DJ Microgreens, Chennai<br>K.P Dandapani · +91 99407 65140</p></div>""", subtype="html")
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "dj-microgreens"}), timeout=15) as resp:
-            return json.loads(resp.read().decode() or "{}")
-    except urllib.error.HTTPError as e:
-        try:
-            return json.loads(e.read().decode() or "{}")
-        except Exception:
-            return {"Status": "Error", "Details": f"HTTP {e.code}"}
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
+            smtp.login(sender, password)
+            smtp.send_message(msg)
     except Exception as e:
-        return {"Status": "Error", "Details": str(e)}
-
-
-def send_sms_otp(digits: str) -> str:
-    """Ask 2Factor to text an OTP. Returns their session id, raises RuntimeError on failure."""
-    template = os.environ.get("TWOFACTOR_TEMPLATE", "").strip()
-    path = f"SMS/{digits}/AUTOGEN" + (f"/{urllib.parse.quote(template)}" if template else "")
-    data = _twofactor_get(path)
-    if data.get("Status") != "Success" or not data.get("Details"):
-        print(f"2Factor send failed: {data}")
-        raise RuntimeError(str(data.get("Details") or "SMS service error"))
-    return data["Details"]
-
-
-def check_sms_otp(session_id: str, otp: str) -> bool:
-    data = _twofactor_get(f"SMS/VERIFY/{urllib.parse.quote(session_id)}/{urllib.parse.quote(otp)}")
-    return data.get("Status") == "Success" and "match" in str(data.get("Details", "")).lower()
+        print(f"Gmail send failed: {e!r}")
+        raise RuntimeError("email service error")
 
 
 # ----------------- CUSTOMER SESSIONS -----------------
