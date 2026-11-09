@@ -390,6 +390,7 @@ function renderOrdersTable() {
       <td class="p-3.5 text-slate-600 max-w-xs">
         <div class="truncate">${o.shipping_address}</div>
         <span class="text-[10px] text-slate-400">${o.shipping_locality || 'Chennai'} - ${o.shipping_pincode}</span>
+        ${o.delivery_latitude != null ? `<a href="https://www.google.com/maps?q=${o.delivery_latitude},${o.delivery_longitude}" target="_blank" class="block text-[10px] font-bold text-emerald-700 hover:underline">📍 Open GPS location</a>` : ''}
       </td>
       <td class="p-3.5">
         <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold ${getStatusBadgeClass(o.order_status)}">
@@ -466,7 +467,7 @@ function renderKanbanBoard() {
               <span class="text-xs font-black text-djgreen-900">₹${o.total_amount.toFixed(0)}</span>
             </div>
             <div class="text-[11px] font-semibold text-slate-800">${o.customer_name}</div>
-            <div class="text-[10px] text-slate-500">${o.shipping_locality || 'Chennai'} - ${o.shipping_pincode}</div>
+            <div class="text-[10px] text-slate-500">${o.shipping_locality || 'Chennai'} - ${o.shipping_pincode}${o.delivery_latitude != null ? ` · <a href="https://www.google.com/maps?q=${o.delivery_latitude},${o.delivery_longitude}" target="_blank" class="font-bold text-emerald-700 hover:underline">📍 Map</a>` : ''}</div>
             <div class="text-[10px] text-slate-600 truncate">${(o.items || []).map(i => `${i.product_name} (${i.weight_label})`).join(', ')}</div>
             
             <div class="pt-2 border-t border-slate-100 flex items-center justify-between">

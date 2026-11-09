@@ -536,6 +536,8 @@ async function handlePlaceOrder(event) {
     delivery_date: document.getElementById('chkDeliveryDate').value,
     delivery_slot: document.getElementById('chkSlot').value,
     delivery_notes: document.getElementById('chkNotes').value.trim(),
+    delivery_latitude: parseFloat(document.getElementById('chkLat').value) || null,
+    delivery_longitude: parseFloat(document.getElementById('chkLng').value) || null,
     payment_method: paymentMethod,
     coupon_code: appliedCoupon ? appliedCoupon.code : null,
     items: cart.map(it => ({
@@ -559,6 +561,7 @@ async function handlePlaceOrder(event) {
       cart = [];
       saveCart();
       updateCartUI();
+      resetGpsLocation();
 
       closeCheckoutModal();
 
@@ -738,18 +741,18 @@ let selectedSubPlan = null;
 function startSubscriptionModal(planName, freq, price) {
   selectedSubPlan = { planName, freq, price };
   
-  const custName = prompt("Enter your Name for Subscription:", "Aditi Krishnan");
+  const custName = prompt("Enter your Name for Subscription:", "");
   if (!custName) return;
-  const custPhone = prompt("Enter your Mobile Number (+91):", "+91 94440 12890");
+  const custPhone = prompt("Enter your Mobile Number (+91):", "");
   if (!custPhone) return;
-  const custAddress = prompt("Enter your Delivery Address in Chennai:", "Flat 4B, Ceebros Heritage, Velachery");
+  const custAddress = prompt("Enter your Delivery Address in Chennai:", "");
   if (!custAddress) return;
 
   const payload = {
     customer_name: custName,
     customer_phone: custPhone,
     shipping_address: custAddress,
-    shipping_pincode: "600042",
+    shipping_pincode: (custAddress.match(/\b6\d{5}\b/) || [""])[0],
     plan_type: planName,
     frequency: freq,
     delivery_day: "Wednesday",
@@ -778,8 +781,10 @@ async function loadCustomerSubscriptions() {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/customer/subscriptions?phone=%2B91%2094441%2055678');
+    const res = await fetch(`/api/customer/subscriptions?phone=${encodeURIComponent(ACCOUNT_PHONE)}`);
     const subs = await res.json();
+    const subCountEl = document.getElementById('drawerSubCount');
+    if (subCountEl) subCountEl.textContent = subs.filter(s => s.status !== 'Cancelled').length;
 
     if (subs.length === 0) {
       container.innerHTML = `<p class="text-xs text-slate-400">No active subscriptions found for this account.</p>`;
@@ -843,6 +848,7 @@ function toggleAccountDrawer(open) {
     backdrop.classList.remove('hidden');
     setTimeout(() => drawer.classList.remove('translate-x-full'), 10);
     loadCustomerOrdersList();
+    loadCustomerSubscriptions();
   } else {
     drawer.classList.add('translate-x-full');
     setTimeout(() => backdrop.classList.add('hidden'), 300);
@@ -858,8 +864,10 @@ async function loadCustomerOrdersList() {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/customer/orders?phone=%2B91%2094440%2012890');
+    const res = await fetch(`/api/customer/orders?phone=${encodeURIComponent(ACCOUNT_PHONE)}`);
     const orders = await res.json();
+    const countEl = document.getElementById('drawerOrderCount');
+    if (countEl) countEl.textContent = orders.length;
 
     if (orders.length === 0) {
       container.innerHTML = `<p class="text-xs text-slate-400">No previous orders found.</p>`;
@@ -917,4 +925,65 @@ async function reorderPreviousItems(orderNum) {
   } catch (err) {
     alert("Could not reorder items.");
   }
+}
+
+// ----------------- ACCOUNT & GPS DELIVERY LOCATION -----------------
+const ACCOUNT_PHONE = '+91 99407 65140';
+
+function setGpsStatus(html, isError) {
+  const el = document.getElementById('gpsStatus');
+  if (!el) return;
+  el.innerHTML = html;
+  el.className = `text-[11px] ${isError ? 'text-rose-700 font-semibold' : 'text-emerald-900'}`;
+}
+
+function resetGpsLocation() {
+  ['chkLat', 'chkLng'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  setGpsStatus('Tap to share your exact delivery spot. The address below fills in automatically; check and edit it if needed.');
+}
+
+function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    setGpsStatus('This browser cannot share location. Please type the address below.', true);
+    return;
+  }
+  const btn = document.getElementById('gpsBtn');
+  btn.disabled = true;
+  setGpsStatus('Finding your location… allow location access if your browser asks.');
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    document.getElementById('chkLat').value = lat;
+    document.getElementById('chkLng').value = lng;
+    const mapLink = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="underline font-bold">View on map</a>`;
+    setGpsStatus(`📍 Location saved (accurate to ~${Math.round(pos.coords.accuracy)} m). ${mapLink}. Filling in the address…`);
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const data = await res.json();
+      const a = data.address || {};
+      const street = [a.house_number, a.building, a.road].filter(Boolean).join(', ');
+      const locality = a.suburb || a.neighbourhood || a.village || a.city_district || a.town || '';
+      const addressEl = document.getElementById('chkAddress');
+      const localityEl = document.getElementById('chkLocality');
+      const pinEl = document.getElementById('chkPincode');
+      if (street && !addressEl.value.trim()) addressEl.value = street;
+      if (locality) localityEl.value = locality;
+      if (a.postcode && /^\d{6}$/.test(a.postcode)) pinEl.value = a.postcode;
+      setGpsStatus(`📍 Location saved (accurate to ~${Math.round(pos.coords.accuracy)} m). ${mapLink}. Please add your door / flat number above.`);
+    } catch (err) {
+      setGpsStatus(`📍 Location saved. ${mapLink}. Please type the address below.`);
+    } finally {
+      btn.disabled = false;
+    }
+  }, (err) => {
+    btn.disabled = false;
+    const msg = err.code === 1
+      ? 'Location access was blocked. Allow location for this site in your browser settings, or type the address below.'
+      : 'Could not get your location. Please try again or type the address below.';
+    setGpsStatus(msg, true);
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
 }
