@@ -56,6 +56,8 @@ class OrderCreateRequest(BaseModel):
     delivery_notes: Optional[str] = ""
     payment_method: str = "UPI"
     coupon_code: Optional[str] = None
+    delivery_latitude: Optional[float] = None
+    delivery_longitude: Optional[float] = None
     items: List[CartItem]
 
 class SubscriptionCreateRequest(BaseModel):
@@ -332,6 +334,12 @@ def create_order(req: OrderCreateRequest):
             """, (req.customer_name, req.customer_phone.strip(), req.customer_email, req.shipping_address, req.shipping_locality, req.shipping_pincode, total_amount, today_str))
             customer_id = cursor.lastrowid
 
+        # GPS delivery spot (only keep sensible coordinates)
+        lat, lng = req.delivery_latitude, req.delivery_longitude
+        if lat is None or lng is None or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            lat = lng = None
+        map_line = f"\n🗺️ Location: https://www.google.com/maps?q={lat},{lng}" if lat is not None else ""
+
         # 3. Generate Unique Order Number
         rand_num = random.randint(1000, 9999)
         order_number = f"DJ-{datetime.now().year}-{rand_num}"
@@ -373,15 +381,15 @@ def create_order(req: OrderCreateRequest):
             discount, gst, total_amount, payment_method, payment_status,
             payment_id, order_status, shipping_address, shipping_locality,
             shipping_pincode, delivery_notes, assigned_delivery_person_id,
-            batch_id, tracking_timeline
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            batch_id, tracking_timeline, delivery_latitude, delivery_longitude
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             order_number, customer_id, req.customer_name, req.customer_phone, req.customer_email,
             today_str, req.delivery_date, req.delivery_slot, subtotal, delivery_fee,
             discount, gst, total_amount, req.payment_method, payment_status,
             payment_id, order_status, req.shipping_address, req.shipping_locality,
             req.shipping_pincode, req.delivery_notes, del_person_id,
-            batch_id, json.dumps(timeline)
+            batch_id, json.dumps(timeline), lat, lng
         ))
         order_id = cursor.lastrowid
 
@@ -393,7 +401,7 @@ def create_order(req: OrderCreateRequest):
             """, (order_id, it["product_id"], it["variant_id"], it["name"], it["weight_label"], it["unit_price"], it["quantity"], it["total_price"]))
 
         # Notification & WhatsApp Simulation
-        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: http://localhost:8000/?track={order_number}\n\nQuestions? WhatsApp us at +91 99407 65140."
+        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}{map_line}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: http://localhost:8000/?track={order_number}\n\nQuestions? WhatsApp us at +91 99407 65140."
         cursor.execute("""
         INSERT INTO notifications (user_type, recipient_phone, recipient_email, notification_type, channel, title, message, status)
         VALUES ('Customer', ?, ?, 'Order Confirmation', 'WhatsApp', ?, ?, 'Delivered')

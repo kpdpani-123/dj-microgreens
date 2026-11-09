@@ -282,6 +282,12 @@ def init_db():
         );
         """)
 
+        # GPS delivery location (added later; add the columns to older databases)
+        order_cols = [r[1] for r in cursor.execute("PRAGMA table_info(orders)").fetchall()]
+        for col in ("delivery_latitude", "delivery_longitude"):
+            if col not in order_cols:
+                cursor.execute(f"ALTER TABLE orders ADD COLUMN {col} REAL")
+
         # 7. Order Items
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS order_items (
