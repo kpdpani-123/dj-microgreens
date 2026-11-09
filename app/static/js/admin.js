@@ -368,7 +368,7 @@ function renderOrdersTable() {
     <tr class="hover:bg-slate-50/80 transition">
       <td class="p-3.5 font-bold text-slate-900 font-mono">
         ${o.order_number}
-        <div class="text-[10px] text-slate-400 font-normal">Batch: ${o.batch_id || 'DJ-BAT-081'}</div>
+        <div class="text-[10px] text-slate-400 font-normal">Batch: ${o.batch_id || 'To be assigned'}</div>
       </td>
       <td class="p-3.5 text-slate-600">
         ${o.order_date}
@@ -541,7 +541,9 @@ async function loadCultivationBatches() {
 
     // Render Batches Table
     const tbody = document.getElementById('cultivationBatchesBody');
-    if (tbody) {
+    if (tbody && batchesData.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-slate-400">No cultivation batches yet. Use “Log New Sowing Batch” to add your first one.</td></tr>`;
+    } else if (tbody) {
       tbody.innerHTML = batchesData.map(b => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3.5 font-bold text-slate-900 font-mono">${b.batch_code}</td>
@@ -661,9 +663,11 @@ async function loadInventory() {
     inventoryData = data.items;
 
     const tbody = document.getElementById('inventoryTableBody');
-    if (tbody) {
+    if (tbody && inventoryData.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No items yet. Use “Add Item” to add one.</td></tr>`;
+    } else if (tbody) {
       tbody.innerHTML = inventoryData.map(it => {
-        const isLow = it.stock_available <= it.min_stock_threshold;
+        const isLow = it.min_stock_threshold > 0 && it.stock_available <= it.min_stock_threshold;
         return `
           <tr class="hover:bg-slate-50 transition ${isLow ? 'bg-amber-50/40' : ''}">
             <td class="p-3.5 font-bold font-mono text-slate-800">${it.item_code}</td>
@@ -676,11 +680,10 @@ async function loadInventory() {
             <td class="p-3.5 text-slate-500">${it.min_stock_threshold} ${it.unit}</td>
             <td class="p-3.5 text-slate-600">${it.opening_stock} ${it.unit}</td>
             <td class="p-3.5 text-slate-600">${it.stock_consumed} ${it.unit}</td>
-            <td class="p-3.5 text-slate-600 text-[11px]">${it.supplier_name || 'Chennai Vendor'}</td>
-            <td class="p-3.5 text-right">
-              <button onclick="quickStockAdd(${it.id}, '${it.item_name}', '${it.unit}')" class="text-xs font-bold text-djgreen-800 hover:underline">
-                + Restock
-              </button>
+            <td class="p-3.5 text-slate-600 text-[11px]">${it.supplier_name ? escapeAttr(it.supplier_name) : '<span class="text-slate-300">–</span>'}</td>
+            <td class="p-3.5 text-right whitespace-nowrap space-x-2">
+              <button onclick="openInventoryItemModal(${it.id})" class="text-xs font-bold text-slate-700 hover:underline">Edit</button>
+              <button onclick="quickStockAdd(${it.id}, '${escapeAttr(it.item_name).replace(/'/g, "&#39;")}', '${it.unit}')" class="text-xs font-bold text-djgreen-800 hover:underline">+ Restock</button>
             </td>
           </tr>
         `;
@@ -721,7 +724,9 @@ async function loadCrmCustomers(segment = '') {
     customersData = data.customers;
 
     const tbody = document.getElementById('crmCustomersBody');
-    if (tbody) {
+    if (tbody && customersData.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No customers yet. Customers appear here after they place their first order.</td></tr>`;
+    } else if (tbody) {
       tbody.innerHTML = customersData.map(c => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3.5 font-bold text-slate-900">${c.name}</td>
@@ -767,7 +772,9 @@ async function loadB2bData() {
     b2bData = await res.json();
 
     const accountsList = document.getElementById('b2bAccountsList');
-    if (accountsList) {
+    if (accountsList && b2bData.b2b_clients.length === 0) {
+      accountsList.innerHTML = `<div class="p-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">No chef accounts yet. Use “Add Chef” to add a restaurant, hotel or cafe.</div>`;
+    } else if (accountsList) {
       accountsList.innerHTML = b2bData.b2b_clients.map(cl => `
         <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -775,11 +782,13 @@ async function loadB2bData() {
               <h4 class="font-bold text-sm text-slate-900">${cl.name}</h4>
               <span class="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded">${cl.customer_type}</span>
             </div>
-            <p class="text-xs text-slate-500 mt-0.5">${cl.address}, ${cl.locality} • Contact: ${cl.phone}</p>
+            <p class="text-xs text-slate-500 mt-0.5">${[cl.address, cl.locality, cl.pincode].filter(Boolean).map(escapeAttr).join(', ') || 'No address yet'} • ${cl.phone}</p>
             <div class="text-xs font-bold text-djgreen-900 mt-1">Total Purchased: ₹${cl.lifetime_value.toLocaleString('en-IN')}</div>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">Net 15 Terms</span>
+            <span class="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">${cl.credit_terms || 'Net 15'} Terms</span>
+            <button onclick="openChefModal(${cl.id})" class="text-xs font-bold text-slate-700 hover:underline">Edit</button>
+            <button onclick="removeChef(${cl.id})" class="text-xs font-bold text-rose-700 hover:underline">Remove</button>
             <a href="https://wa.me/${cl.phone.replace(/[^0-9]/g, '')}?text=Hi%20Chef%2C%20DJ%20Microgreens%20here%20with%20your%20weekly%20fresh%20harvest%20update" target="_blank" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1">
               <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
               <span>Chat Chef</span>
@@ -890,4 +899,129 @@ async function loadFinanceOverview() {
   } catch (err) {
     console.error('Error loading finance:', err);
   }
+}
+
+
+// ----------------- INVENTORY: ADD / EDIT ITEMS -----------------
+function openInventoryItemModal(itemId) {
+  const it = itemId ? inventoryData.find(x => x.id === itemId) : null;
+  document.getElementById('invModalTitle').textContent = it ? 'Edit Item' : 'Add Item';
+  document.getElementById('invId').value = it ? it.id : '';
+  document.getElementById('invCode').value = it ? it.item_code : '';
+  document.getElementById('invName').value = it ? it.item_name : '';
+  document.getElementById('invCategory').value = it ? it.category : '';
+  document.getElementById('invUnit').value = it ? it.unit : '';
+  document.getElementById('invAvailable').value = it ? it.stock_available : 0;
+  document.getElementById('invMin').value = it ? it.min_stock_threshold : 0;
+  document.getElementById('invOpening').value = it ? it.opening_stock : 0;
+  document.getElementById('invConsumed').value = it ? it.stock_consumed : 0;
+  document.getElementById('invCost').value = it ? it.unit_cost : 0;
+  document.getElementById('invSupplier').value = it ? (it.supplier_name || '') : '';
+  document.getElementById('invDeleteBtn').classList.toggle('hidden', !it);
+  document.getElementById('invMsg').classList.add('hidden');
+  document.getElementById('inventoryItemModal').classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeInventoryItemModal() {
+  document.getElementById('inventoryItemModal').classList.add('hidden');
+}
+
+async function saveInventoryItem(event) {
+  event.preventDefault();
+  const id = document.getElementById('invId').value;
+  const num = (elId) => parseFloat(document.getElementById(elId).value) || 0;
+  const payload = {
+    item_code: document.getElementById('invCode').value,
+    item_name: document.getElementById('invName').value,
+    category: document.getElementById('invCategory').value,
+    unit: document.getElementById('invUnit').value,
+    stock_available: num('invAvailable'),
+    min_stock_threshold: num('invMin'),
+    opening_stock: num('invOpening'),
+    stock_consumed: num('invConsumed'),
+    unit_cost: num('invCost'),
+    supplier_name: document.getElementById('invSupplier').value
+  };
+  const msg = document.getElementById('invMsg');
+  try {
+    const res = await fetch(id ? `/api/admin/inventory/items/${id}` : '/api/admin/inventory/items', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not save');
+    closeInventoryItemModal();
+    loadInventory();
+  } catch (err) {
+    showFormMsg(msg, err.message, false);
+  }
+}
+
+async function deleteInventoryItem() {
+  const id = document.getElementById('invId').value;
+  const name = document.getElementById('invName').value;
+  if (!id || !confirm(`Delete "${name}" from inventory? This cannot be undone.`)) return;
+  const res = await fetch(`/api/admin/inventory/items/${id}`, { method: 'DELETE' });
+  if (res.ok) { closeInventoryItemModal(); loadInventory(); }
+  else { const d = await res.json(); showFormMsg(document.getElementById('invMsg'), d.detail || 'Could not delete', false); }
+}
+
+// ----------------- B2B: CHEF ACCOUNTS -----------------
+function openChefModal(chefId) {
+  const cl = chefId && b2bData ? b2bData.b2b_clients.find(x => x.id === chefId) : null;
+  document.getElementById('chefModalTitle').textContent = cl ? 'Edit Chef' : 'Add Chef';
+  document.getElementById('chefId').value = cl ? cl.id : '';
+  document.getElementById('chefName').value = cl ? cl.name : '';
+  document.getElementById('chefPhone').value = cl ? cl.phone : '';
+  document.getElementById('chefEmail').value = cl ? (cl.email || '') : '';
+  document.getElementById('chefType').value = cl ? cl.customer_type : 'Restaurant';
+  document.getElementById('chefTerms').value = cl ? (cl.credit_terms || 'Net 15') : 'Net 15';
+  document.getElementById('chefAddress').value = cl ? (cl.address || '') : '';
+  document.getElementById('chefLocality').value = cl ? (cl.locality || '') : '';
+  document.getElementById('chefPincode').value = cl ? (cl.pincode || '') : '';
+  document.getElementById('chefMsg').classList.add('hidden');
+  document.getElementById('chefModal').classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeChefModal() {
+  document.getElementById('chefModal').classList.add('hidden');
+}
+
+async function saveChef(event) {
+  event.preventDefault();
+  const id = document.getElementById('chefId').value;
+  const payload = {
+    name: document.getElementById('chefName').value,
+    phone: document.getElementById('chefPhone').value,
+    email: document.getElementById('chefEmail').value,
+    customer_type: document.getElementById('chefType').value,
+    credit_terms: document.getElementById('chefTerms').value,
+    address: document.getElementById('chefAddress').value,
+    locality: document.getElementById('chefLocality').value,
+    pincode: document.getElementById('chefPincode').value
+  };
+  try {
+    const res = await fetch(id ? `/api/admin/b2b/chefs/${id}` : '/api/admin/b2b/chefs', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not save');
+    closeChefModal();
+    loadB2bData();
+  } catch (err) {
+    showFormMsg(document.getElementById('chefMsg'), err.message, false);
+  }
+}
+
+async function removeChef(chefId) {
+  const cl = b2bData.b2b_clients.find(x => x.id === chefId);
+  if (!cl || !confirm(`Remove the chef account "${cl.name}"? They will no longer be able to order on the Chef Ordering Portal. Past orders are kept.`)) return;
+  const res = await fetch(`/api/admin/b2b/chefs/${chefId}`, { method: 'DELETE' });
+  if (res.ok) loadB2bData();
+  else alert('Could not remove this chef account.');
 }

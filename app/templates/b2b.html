@@ -43,12 +43,11 @@
       </div>
 
       <div class="flex items-center space-x-3 text-xs">
-        <span class="text-slate-400 hidden sm:inline">Active Chef Account:</span>
-        <select id="b2bClientSelect" onchange="updateB2bClient(this.value)" class="bg-slate-800 border border-slate-700 text-emerald-300 font-bold px-3 py-1.5 rounded-xl focus:outline-none">
-          <option value="4">Chef Vikram – ITC Grand Chola (Guindy)</option>
-          <option value="5">Chef Anand – Pumpkin Tales Cafe (Alwarpet)</option>
-          <option value="6">Executive Kitchen – The Marina Restaurant (Nungambakkam)</option>
-        </select>
+        <span id="chefSignedInBox" class="hidden items-center gap-2">
+          <span class="text-slate-400 hidden sm:inline">Signed in:</span>
+          <strong id="chefSignedInName" class="text-emerald-300"></strong>
+          <button onclick="chefSignOut()" class="text-slate-300 hover:text-white underline">Sign out</button>
+        </span>
         <a href="/" class="text-slate-300 hover:text-white px-2 py-1">Retail Store →</a>
       </div>
     </div>
@@ -73,8 +72,35 @@
       </div>
     </div>
 
+    <!-- Chef sign-in -->
+    <div id="chefSignInCard" class="hidden bg-white rounded-3xl border border-slate-200 shadow-sm p-6 max-w-md mx-auto space-y-4 text-xs">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900">Chef sign-in</h2>
+        <p class="text-slate-500">Sign in with the mobile number DJ Microgreens registered for your kitchen.</p>
+      </div>
+      <p id="chefOtpOff" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600">Chef sign-in is being set up. Please WhatsApp us on <a class="text-emerald-700 font-bold" href="https://wa.me/919940765140">+91 99407 65140</a> to place an order.</p>
+      <p id="chefNotRegistered" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-semibold">This number is not registered as a chef account yet. Please ask DJ Microgreens (+91 99407 65140) to add you, then sign in again.</p>
+      <form id="chefPhoneForm" onsubmit="chefRequestOtp(event)" class="space-y-3">
+        <div class="flex">
+          <span class="px-3 py-2.5 bg-slate-100 border border-r-0 border-slate-200 rounded-l-xl font-bold text-slate-600">+91</span>
+          <input id="chefPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required
+                 class="flex-1 bg-slate-50 border border-slate-200 rounded-r-xl px-3 py-2.5 text-sm font-bold focus:outline-none">
+        </div>
+        <button id="chefSendBtn" type="submit" class="w-full bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-2.5 rounded-xl">Send OTP</button>
+      </form>
+      <form id="chefOtpForm" onsubmit="chefVerifyOtp(event)" class="hidden space-y-3">
+        <p class="text-slate-600">Enter the OTP sent to <strong id="chefOtpPhone"></strong>
+          <button type="button" onclick="chefChangePhone()" class="text-emerald-700 font-bold underline ml-1">Change</button></p>
+        <input id="chefOtp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="OTP" required
+               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-lg font-black tracking-[0.4em] text-center focus:outline-none">
+        <button id="chefVerifyBtn" type="submit" class="w-full bg-djgreen-800 hover:bg-djgreen-900 text-white font-bold py-2.5 rounded-xl">Verify & Sign In</button>
+        <button type="button" onclick="chefRequestOtp()" class="w-full text-emerald-700 font-bold py-1">Resend OTP</button>
+      </form>
+      <p id="chefMsg" class="hidden font-semibold rounded-xl px-3 py-2"></p>
+    </div>
+
     <!-- Chef Quick Bulk Ordering & Wholesale Price Table -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div id="chefOrderingArea" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
       
       <!-- Left: Wholesale Bulk Products -->
       <div class="lg:col-span-8 space-y-4">
@@ -169,11 +195,79 @@
       tomorrow.setDate(tomorrow.getDate() + 1);
       document.getElementById('b2bDeliveryDate').value = tomorrow.toISOString().split('T')[0];
       loadWholesaleProducts();
+      loadChefStatus();
     });
+
+    let chefOtpPhone = '';
+
+    function chefMsg(text, ok) {
+      const el = document.getElementById('chefMsg');
+      el.textContent = text;
+      el.className = `font-semibold rounded-xl px-3 py-2 ${ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`;
+    }
+
+    async function chefPost(url, body) {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Something went wrong. Please try again.');
+      return data;
+    }
+
+    async function loadChefStatus() {
+      const status = await (await fetch('/api/account/status')).json();
+      const c = status.customer;
+      const signedInChef = c && c.is_chef;
+      document.getElementById('chefOrderingArea').classList.toggle('hidden', !signedInChef);
+      document.getElementById('chefSignInCard').classList.toggle('hidden', !!signedInChef);
+      const box = document.getElementById('chefSignedInBox');
+      box.classList.toggle('hidden', !c);
+      box.classList.toggle('flex', !!c);
+      document.getElementById('chefSignedInName').textContent = c ? (c.name || c.phone) : '';
+      document.getElementById('chefNotRegistered').classList.toggle('hidden', !(c && !c.is_chef));
+      document.getElementById('chefOtpOff').classList.toggle('hidden', status.otp_enabled);
+      document.getElementById('chefPhoneForm').classList.toggle('hidden', !status.otp_enabled || !!chefOtpPhone || !!c);
+      document.getElementById('chefOtpForm').classList.toggle('hidden', !status.otp_enabled || !chefOtpPhone);
+    }
+
+    async function chefRequestOtp(event) {
+      if (event) event.preventDefault();
+      const phone = chefOtpPhone || document.getElementById('chefPhone').value;
+      try {
+        const data = await chefPost('/api/account/send-otp', { phone });
+        chefOtpPhone = phone;
+        document.getElementById('chefOtpPhone').textContent = data.message.replace('OTP sent to ', '');
+        chefMsg(data.message, true);
+        await loadChefStatus();
+        document.getElementById('chefOtp').focus();
+      } catch (err) { chefMsg(err.message, false); }
+    }
+
+    function chefChangePhone() {
+      chefOtpPhone = '';
+      document.getElementById('chefMsg').classList.add('hidden');
+      loadChefStatus();
+    }
+
+    async function chefVerifyOtp(event) {
+      event.preventDefault();
+      try {
+        await chefPost('/api/account/verify-otp', { phone: chefOtpPhone, otp: document.getElementById('chefOtp').value });
+        chefOtpPhone = '';
+        document.getElementById('chefMsg').classList.add('hidden');
+        await loadChefStatus();
+      } catch (err) { chefMsg(err.message, false); }
+    }
+
+    async function chefSignOut() {
+      await fetch('/api/account/logout', { method: 'POST' });
+      chefOtpPhone = '';
+      document.getElementById('chefNotRegistered').classList.add('hidden');
+      await loadChefStatus();
+    }
 
     async function loadWholesaleProducts() {
       try {
-        const res = await fetch('/api/admin/b2b/summary');
+        const res = await fetch('/api/b2b/catalog');
         const data = await res.json();
         b2bCatalog = data.wholesale_catalog;
         renderWholesaleTable();
@@ -251,7 +345,6 @@
     }
 
     async function submitB2bOrder() {
-      const clientId = document.getElementById('b2bClientSelect').value;
       const items = [];
 
       for (const [idx, qty] of Object.entries(b2bCart)) {
@@ -272,23 +365,26 @@
       }
 
       const payload = {
-        customer_id: parseInt(clientId),
         delivery_date: document.getElementById('b2bDeliveryDate').value,
         delivery_slot: "Morning (7:00 AM - 9:00 AM)",
-        credit_terms: "Net 15",
         items: items,
         notes: document.getElementById('b2bNotes').value
       };
 
       try {
-        const res = await fetch('/api/admin/b2b/orders', {
+        const res = await fetch('/api/b2b/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const data = await res.json();
+        if (!res.ok) {
+          alert(data.detail || 'Could not place the order.');
+          if (res.status === 401 || res.status === 403) loadChefStatus();
+          return;
+        }
         if (data.success) {
-          alert(`🎉 B2B Order ${data.order_number} confirmed for ₹${data.total_amount}!\nFarm production scheduled in Guindy.`);
+          alert(`🎉 B2B Order ${data.order_number} confirmed for ₹${data.total_amount}!`);
           b2bCart = {};
           renderWholesaleTable();
           renderB2bCartSummary();

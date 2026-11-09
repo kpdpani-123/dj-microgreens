@@ -64,6 +64,7 @@ API_TAB_RULES = [
     ("/api/admin/inventory", ["inventory"]),
     ("/api/admin/crm", ["crm"]),
     ("/api/admin/delivery", ["delivery"]),
+    ("/api/admin/b2b", ["b2b"]),
     ("/api/admin/finance", ["finance"]),
     ("/api/exports", ["overview", "orders", "finance"]),
 ]
@@ -138,9 +139,6 @@ def public_user(user: dict) -> dict:
 
 def required_tabs_for_path(path: str) -> Optional[list]:
     """Tabs that allow access to this API path, or None if the path is not staff-only."""
-    # The public chef ordering portal (/b2b) uses these two endpoints
-    if path.startswith("/api/admin/b2b"):
-        return None
     for prefix, tabs in API_TAB_RULES:
         if path.startswith(prefix):
             return tabs

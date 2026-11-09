@@ -15,7 +15,8 @@ from app.auth import (
     required_tabs_for_path,
     ROLE_TABS,
 )
-from app.routers import api, admin, exports, auth
+from app.routers import api, admin, exports, auth, account
+from app.cleanup import remove_demo_data
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -42,6 +43,7 @@ app.include_router(api.router)
 app.include_router(admin.router)
 app.include_router(exports.router)
 app.include_router(auth.router)
+app.include_router(account.router)
 
 _db_ready = False
 
@@ -52,6 +54,7 @@ def prepare_database():
     init_db()
     seed_database()
     ensure_staff_accounts()
+    remove_demo_data()
     _db_ready = True
 
 @app.on_event("startup")

@@ -16,17 +16,7 @@ def seed_database():
 
         # 1. Staff logins are created by app.auth.ensure_staff_accounts()
 
-        # 2. Customers: only the restaurant accounts used by the chef ordering portal (/b2b).
-        #    Retail customers are added automatically when they place orders.
-        customers = [
-            (4, "Chef Vikram (ITC Grand Chola)", "+91 99620 44321", "vikram.chola@itchotels.in", "b2b123", "No. 63, Mount Road, Guindy", "Guindy", "600032", "Hotel", 0, 0.0, None, "Restaurant"),
-            (5, "Chef Anand (Pumpkin Tales Cafe)", "+91 98410 77654", "kitchen@pumpkintales.com", "b2b123", "37, Bheemanna Garden St, Alwarpet", "Alwarpet", "600018", "Cafe", 0, 0.0, None, "Restaurant"),
-            (6, "The Marina Seafood Restaurant", "+91 98400 99887", "orders@themarina.in", "b2b123", "39, College Road, Nungambakkam", "Nungambakkam", "600006", "Restaurant", 0, 0.0, None, "Restaurant")
-        ]
-        cursor.executemany("""
-        INSERT INTO customers (id, name, phone, email, password_hash, address, locality, pincode, customer_type, total_orders, lifetime_value, last_order_date, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, customers)
+        # 2. No sample customers: they sign up with their phone, chefs are added by staff.
 
         # 3. Product Categories
         categories = [
@@ -181,59 +171,19 @@ def seed_database():
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """, delivery_team)
 
-        # 7. Cultivation Batches
-        batches = [
-            ("DJ-BAT-2026-081", 1, "Calabrese Broccoli", 450.0, 15, "T-101 to T-115", (now - timedelta(days=9)).strftime("%Y-%m-%d"), (now - timedelta(days=7)).strftime("%Y-%m-%d"), today_str, None, "Ready for Harvest", 2250.0, 0.0, 0.0, "Grade A+", "Dense, uniform canopy, healthy trichomes", "Active"),
-            ("DJ-BAT-2026-082", 2, "Black Oil Sunflower", 1200.0, 20, "T-116 to T-135", (now - timedelta(days=8)).strftime("%Y-%m-%d"), (now - timedelta(days=6)).strftime("%Y-%m-%d"), (now + timedelta(days=1)).strftime("%Y-%m-%d"), None, "Under LED Lights", 4800.0, 0.0, 0.0, "Grade A+", "Rich cotyledon leaf size, hull shedding 98%", "Active"),
-            ("DJ-BAT-2026-083", 3, "China Rose Radish", 600.0, 12, "T-136 to T-147", (now - timedelta(days=6)).strftime("%Y-%m-%d"), (now - timedelta(days=4)).strftime("%Y-%m-%d"), (now + timedelta(days=2)).strftime("%Y-%m-%d"), None, "Under LED Lights", 2400.0, 0.0, 0.0, "Grade A+", "Stunning pink stem coloration, vigorous growth", "Active"),
-            ("DJ-BAT-2026-084", 5, "Dun Pea", 1500.0, 18, "T-148 to T-165", (now - timedelta(days=10)).strftime("%Y-%m-%d"), (now - timedelta(days=7)).strftime("%Y-%m-%d"), today_str, today_str, "Harvested", 3600.0, 3520.0, 80.0, "Grade A+", "Succulent tendrils, pristine hygiene inspection", "Completed"),
-            ("DJ-BAT-2026-085", 7, "Ruby Ball Red Cabbage", 400.0, 10, "T-166 to T-175", (now - timedelta(days=3)).strftime("%Y-%m-%d"), (now - timedelta(days=1)).strftime("%Y-%m-%d"), (now + timedelta(days=7)).strftime("%Y-%m-%d"), None, "Germinating", 1800.0, 0.0, 0.0, "Grade A", "Blackout humidity dome 82%, even sprout emergence", "Active"),
-            ("DJ-BAT-2026-086", 8, "Organic Hard Red Wheat", 2000.0, 16, "T-176 to T-191", (now - timedelta(days=7)).strftime("%Y-%m-%d"), (now - timedelta(days=5)).strftime("%Y-%m-%d"), today_str, today_str, "Harvested", 3800.0, 3750.0, 50.0, "Grade A+", "Vibrant deep green shoots, sweet aroma", "Completed")
-        ]
-        cursor.executemany("""
-        INSERT INTO cultivation_batches (
-            batch_code, product_id, crop_variety, seed_quantity_grams, tray_count,
-            tray_numbers, sowing_date, expected_germination_date, expected_harvest_date,
-            actual_harvest_date, growing_stage, expected_yield_grams, actual_yield_grams,
-            wastage_grams, quality_grade, inspection_notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, batches)
-
-        # 8. Harvest Records
-        harvests = [
-            (4, "DJ-BAT-2026-084", "Dun Pea", today_str, 3520.0, "Farm Manager", "Optimal (78%)", 1, 10, 15, 6, 2, "Stored in Cold Room (4°C)"),
-            (6, "DJ-BAT-2026-086", "Organic Wheatgrass", today_str, 3750.0, "Farm Manager", "Optimal (76%)", 1, 12, 18, 5, 2, "Stored in Cold Room (4°C)")
-        ]
-        cursor.executemany("""
-        INSERT INTO harvest_records (
-            batch_id, batch_code, crop_variety, harvest_date, yield_grams,
-            operator_name, moisture_content, hygiene_pass, packaged_units_50g,
-            packaged_units_100g, packaged_units_250g, packaged_units_500g, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, harvests)
-
-        # 9. Suppliers
-        suppliers = [
-            ("GreenSeeds India Organics", "Sridhar Govind", "+91 94432 11002", "seeds@greenseedsindia.com", "Coimbatore, Tamil Nadu", "33AABCG1234F1Z1", "Non-GMO Certified Seeds (Broccoli, Sunflower, Radish)", 4.9),
-            ("Tamil Nadu Coir Board Bio-Medium", "Latha Murugesan", "+91 98845 77112", "sales@tncoir.gov.in", "Pollachi, Tamil Nadu", "33AABCT9988G1Z5", "Washed Low-EC Organic Cocopeat Bricks & Plugs", 4.8),
-            ("EcoPack Bio Solutions", "Karan Mehta", "+91 97890 44221", "karan@ecopackchennai.com", "Ambattur Industrial Estate, Chennai", "33AAACE4567H1Z8", "Biodegradable Kraft Salad Bowls, Clamshells & Cold Bags", 4.9)
-        ]
-        cursor.executemany("""
-        INSERT INTO suppliers (company_name, contact_person, phone, email, address, gst_number, supplies_provided, rating)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, suppliers)
+        # 7-9. No sample cultivation batches, harvests or suppliers: staff add their own.
 
         # 10. Inventory Items
         inventory_items = [
-            ("RAW-SED-01", "Broccoli Calabrese Seeds (Non-GMO)", "Seeds", "kg", 15.0, 10.0, 4.5, 20.5, 5.0, 1800.0, 1),
-            ("RAW-SED-02", "Black Oil Sunflower Seeds (Organic)", "Seeds", "kg", 40.0, 25.0, 18.0, 47.0, 15.0, 450.0, 1),
-            ("RAW-SED-03", "China Rose Radish Seeds", "Seeds", "kg", 20.0, 15.0, 7.2, 27.8, 8.0, 950.0, 1),
-            ("RAW-SED-04", "Dun Pea Seeds (Micro-greens Grade)", "Seeds", "kg", 50.0, 30.0, 22.0, 58.0, 20.0, 320.0, 1),
-            ("MED-COI-01", "Sterilized Low-EC Cocopeat (5kg Block)", "Growing Medium", "blocks", 120.0, 80.0, 45.0, 155.0, 30.0, 160.0, 2),
-            ("HAR-TRY-01", "Standard 1020 Microgreen Trays (Heavy Duty)", "Trays", "pcs", 400.0, 100.0, 20.0, 480.0, 50.0, 85.0, 2),
-            ("PKG-BOX-01", "Eco Kraft Window Box (100g/250g)", "Packaging", "pcs", 2500.0, 2000.0, 950.0, 3550.0, 500.0, 6.5, 3),
-            ("PKG-BOX-02", "PLA Biodegradable Deli Clamshell (50g)", "Packaging", "pcs", 3000.0, 1500.0, 820.0, 3680.0, 600.0, 4.8, 3),
-            ("PKG-SEAL-01", "DJ Freshness Tamper-Evident Seals", "Packaging", "rolls", 50.0, 30.0, 12.0, 68.0, 10.0, 120.0, 3)
+            ("RAW-SED-01", "Broccoli Calabrese Seeds (Non-GMO)", "Seeds", "kg", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("RAW-SED-02", "Black Oil Sunflower Seeds (Organic)", "Seeds", "kg", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("RAW-SED-03", "China Rose Radish Seeds", "Seeds", "kg", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("RAW-SED-04", "Dun Pea Seeds (Micro-greens Grade)", "Seeds", "kg", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("MED-COI-01", "Sterilized Low-EC Cocopeat (5kg Block)", "Growing Medium", "blocks", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("HAR-TRY-01", "Standard 1020 Microgreen Trays (Heavy Duty)", "Trays", "pcs", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("PKG-BOX-01", "Eco Kraft Window Box (100g/250g)", "Packaging", "pcs", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("PKG-BOX-02", "PLA Biodegradable Deli Clamshell (50g)", "Packaging", "pcs", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None),
+            ("PKG-SEAL-01", "DJ Freshness Tamper-Evident Seals", "Packaging", "rolls", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None)
         ]
         cursor.executemany("""
         INSERT INTO inventory (
@@ -243,16 +193,7 @@ def seed_database():
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, inventory_items)
 
-        # 11. Purchase Records
-        purchases = [
-            ("PO-2026-041", 1, "GreenSeeds India Organics", 1, "Broccoli Calabrese Seeds", 10.0, 1800.0, 18000.0, (now - timedelta(days=14)).strftime("%Y-%m-%d"), "Paid", "INV-GS-8821"),
-            ("PO-2026-042", 2, "Tamil Nadu Coir Board Bio-Medium", 5, "Sterilized Low-EC Cocopeat", 80.0, 160.0, 12800.0, (now - timedelta(days=12)).strftime("%Y-%m-%d"), "Paid", "INV-TNC-4401"),
-            ("PO-2026-043", 3, "EcoPack Bio Solutions", 7, "Eco Kraft Window Box", 2000.0, 6.5, 13000.0, (now - timedelta(days=8)).strftime("%Y-%m-%d"), "Paid", "INV-EP-9912")
-        ]
-        cursor.executemany("""
-        INSERT INTO purchase_records (po_number, supplier_id, supplier_name, item_id, item_name, quantity, unit_price, total_amount, purchase_date, payment_status, invoice_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, purchases)
+        # 11. No sample purchase records.
 
         # 12. Coupons
         coupons = [

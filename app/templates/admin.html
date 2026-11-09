@@ -493,9 +493,9 @@
           <h2 class="text-xl sm:text-2xl font-black text-slate-900">Inventory & Consumables Warehouse</h2>
           <p class="text-xs text-slate-500">Organic seeds, 1020 trays, cocopeat medium, biodegradable packaging and seals.</p>
         </div>
-        <button onclick="openStockAdjustModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm">
+        <button onclick="openInventoryItemModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm">
           <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>Stock In / Out Adjustment</span>
+          <span>Add Item</span>
         </button>
       </div>
 
@@ -577,10 +577,16 @@
           <h2 class="text-xl sm:text-2xl font-black text-slate-900">Chennai Restaurant & Chef B2B Operations</h2>
           <p class="text-xs text-slate-500">Bulk wholesale pricing, recurring weekly standing orders, and Net 15/30 credit terms.</p>
         </div>
-        <a href="/b2b" target="_blank" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5">
-          <i data-lucide="chef-hat" class="w-4 h-4"></i>
-          <span>Open Chef Ordering Portal →</span>
-        </a>
+        <div class="flex items-center gap-2">
+          <button onclick="openChefModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            <span>Add Chef</span>
+          </button>
+          <a href="/b2b" target="_blank" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5">
+            <i data-lucide="chef-hat" class="w-4 h-4"></i>
+            <span>Open Chef Ordering Portal →</span>
+          </a>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -773,6 +779,96 @@
         <div class="flex space-x-2 pt-2 border-t border-slate-100">
           <button type="button" onclick="closeSowingModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
           <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Initiate Batch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT INVENTORY ITEM -->
+  <div id="inventoryItemModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 id="invModalTitle" class="font-bold text-base text-slate-900">Add Item</h3>
+        <button onclick="closeInventoryItemModal()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="inventoryItemForm" onsubmit="saveInventoryItem(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="invId">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block font-semibold text-slate-600 mb-1">Item Code *</label>
+            <input id="invCode" required placeholder="e.g. RAW-SED-05" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 uppercase"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Category *</label>
+            <input id="invCategory" required list="invCategories" placeholder="Seeds" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <datalist id="invCategories"><option value="Seeds"><option value="Growing Medium"><option value="Trays"><option value="Packaging"><option value="Other"></datalist></div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2"><label class="block font-semibold text-slate-600 mb-1">Item Name *</label>
+            <input id="invName" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Unit *</label>
+            <input id="invUnit" required list="invUnits" placeholder="kg" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <datalist id="invUnits"><option value="kg"><option value="g"><option value="pcs"><option value="blocks"><option value="rolls"><option value="litres"></datalist></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block font-semibold text-slate-600 mb-1">Available Stock</label>
+            <input id="invAvailable" type="number" min="0" step="any" value="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Min Threshold <span class="font-normal text-slate-400">(low-stock alert)</span></label>
+            <input id="invMin" type="number" min="0" step="any" value="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Opening Stock</label>
+            <input id="invOpening" type="number" min="0" step="any" value="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Consumed</label>
+            <input id="invConsumed" type="number" min="0" step="any" value="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Unit Cost (₹)</label>
+            <input id="invCost" type="number" min="0" step="any" value="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Supplier</label>
+            <input id="invSupplier" placeholder="Supplier name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+        </div>
+        <p id="invMsg" class="hidden font-semibold rounded-xl px-3 py-2"></p>
+        <div class="flex gap-2 pt-2 border-t border-slate-100">
+          <button type="button" id="invDeleteBtn" onclick="deleteInventoryItem()" class="hidden py-2.5 px-4 rounded-xl border border-rose-200 text-rose-700 font-bold hover:bg-rose-50">Delete</button>
+          <button type="button" onclick="closeInventoryItemModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT CHEF ACCOUNT -->
+  <div id="chefModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 id="chefModalTitle" class="font-bold text-base text-slate-900">Add Chef</h3>
+          <p class="text-[11px] text-slate-500">The chef signs in to the Chef Ordering Portal with this phone number and an OTP.</p>
+        </div>
+        <button onclick="closeChefModal()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="chefForm" onsubmit="saveChef(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="chefId">
+        <div><label class="block font-semibold text-slate-600 mb-1">Chef / Restaurant Name *</label>
+          <input id="chefName" required placeholder="e.g. Chef Ravi – Spice Route" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block font-semibold text-slate-600 mb-1">Mobile Number *</label>
+            <input id="chefPhone" type="tel" required placeholder="98765 43210" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Email</label>
+            <input id="chefEmail" type="email" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Type</label>
+            <select id="chefType" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <option>Restaurant</option><option>Hotel</option><option>Cafe</option></select></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Credit Terms</label>
+            <select id="chefTerms" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <option>Net 15</option><option>Net 30</option><option>Prepaid</option></select></div>
+        </div>
+        <div><label class="block font-semibold text-slate-600 mb-1">Delivery Address</label>
+          <input id="chefAddress" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block font-semibold text-slate-600 mb-1">Locality</label>
+            <input id="chefLocality" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+          <div><label class="block font-semibold text-slate-600 mb-1">Pincode</label>
+            <input id="chefPincode" inputmode="numeric" maxlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"></div>
+        </div>
+        <p id="chefMsg" class="hidden font-semibold rounded-xl px-3 py-2"></p>
+        <div class="flex gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="closeChefModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-djgreen-800 text-white font-bold hover:bg-djgreen-900">Save</button>
         </div>
       </form>
     </div>
