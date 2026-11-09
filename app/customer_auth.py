@@ -58,10 +58,15 @@ def find_customer_by_phone(conn, phone: str) -> Optional[dict]:
 
 # ----------------- CONTINUE WITH GOOGLE -----------------
 GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
+# The shop's Google sign-in Client ID. It is public (it is sent to every visitor's browser),
+# so it can live here; a GOOGLE_CLIENT_ID setting in Vercel would replace it.
+DEFAULT_GOOGLE_CLIENT_ID = "614617656298-uqd9dh3kunt5sii8f3s8pqbkq2gabos5.apps.googleusercontent.com"
 
 
 def google_client_id() -> str:
-    return os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+    if "GOOGLE_CLIENT_ID" in os.environ:
+        return os.environ["GOOGLE_CLIENT_ID"].strip()
+    return DEFAULT_GOOGLE_CLIENT_ID
 
 
 def sign_in_enabled() -> bool:
