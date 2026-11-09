@@ -6,6 +6,7 @@ import random
 from datetime import datetime, timedelta
 
 from app.database import get_db
+from app.customer_auth import normalize_phone, find_customer_by_phone, site_url
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Management API"])
 
@@ -59,6 +60,28 @@ class InventoryUpdateRequest(BaseModel):
     adjustment_type: str  # "add", "consume"
     quantity: float
     reason: Optional[str] = ""
+
+class InventoryItemRequest(BaseModel):
+    item_code: str
+    item_name: str
+    category: str
+    unit: str
+    opening_stock: float = 0
+    stock_available: float = 0
+    stock_consumed: float = 0
+    min_stock_threshold: float = 0
+    unit_cost: float = 0
+    supplier_name: Optional[str] = ""
+
+class ChefAccountRequest(BaseModel):
+    name: str
+    phone: str
+    customer_type: str = "Restaurant"   # Hotel / Restaurant / Cafe
+    email: Optional[str] = ""
+    address: Optional[str] = ""
+    locality: Optional[str] = ""
+    pincode: Optional[str] = ""
+    credit_terms: str = "Net 15"
 
 class B2BOrderCreateRequest(BaseModel):
     customer_id: int
@@ -271,7 +294,7 @@ def update_order_status(req: StatusUpdateRequest, request: Request):
         """, (request.state.user["username"], order["order_number"],f"Changed status to '{req.new_status}'. Notes: {req.notes}"))
 
         # Notification & WhatsApp Simulation
-        wa_msg = f"🌱 *DJ Microgreens Update!*\n\nOrder *#{order['order_number']}* status updated: *{req.new_status}*.\n\nTrack: http://localhost:8000/?track={order['order_number']}"
+        wa_msg = f"🌱 *DJ Microgreens Update!*\n\nOrder *#{order['order_number']}* status updated: *{req.new_status}*.\n\nTrack: {site_url(request)}/?track={order['order_number']}"
         cursor.execute("""
         INSERT INTO notifications (user_type, recipient_phone, notification_type, channel, title, message)
         VALUES ('Customer', ?, 'Status Update', 'WhatsApp', ?, ?)
@@ -348,8 +371,8 @@ def create_sowing_batch(req: SowingBatchCreateRequest):
 
         # Auto-consume inventory (seeds, trays, cocopeat)
         seed_kg = req.seed_quantity_grams / 1000.0
-        cursor.execute("UPDATE inventory SET stock_consumed = stock_consumed + ?, stock_available = stock_available - ? WHERE category = 'Seeds' AND item_name LIKE ?", (seed_kg, seed_kg, f"%{req.crop_variety.split()[0]}%"))
-        cursor.execute("UPDATE inventory SET stock_consumed = stock_consumed + ?, stock_available = stock_available - ? WHERE item_code = 'MED-COI-01'", (req.tray_count * 0.5, req.tray_count * 0.5))
+        cursor.execute("UPDATE inventory SET stock_consumed = stock_consumed + ?, stock_available = MAX(0, stock_available - ?) WHERE category = 'Seeds' AND item_name LIKE ?", (seed_kg, seed_kg, f"%{req.crop_variety.split()[0]}%"))
+        cursor.execute("UPDATE inventory SET stock_consumed = stock_consumed + ?, stock_available = MAX(0, stock_available - ?) WHERE item_code = 'MED-COI-01'", (req.tray_count * 0.5, req.tray_count * 0.5))
 
         # Audit log
         cursor.execute("""
@@ -398,14 +421,14 @@ def get_inventory():
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-        SELECT i.*, s.company_name as supplier_name, s.phone as supplier_phone
+        SELECT i.*, COALESCE(NULLIF(i.supplier_name, ''), s.company_name) as supplier_name, s.phone as supplier_phone
         FROM inventory i
         LEFT JOIN suppliers s ON i.supplier_id = s.id
         ORDER BY i.category ASC, i.item_name ASC
         """)
         items = [dict(r) for r in cursor.fetchall()]
         
-        low_stock_items = [it for it in items if it["stock_available"] <= it["min_stock_threshold"]]
+        low_stock_items = [it for it in items if it["min_stock_threshold"] > 0 and it["stock_available"] <= it["min_stock_threshold"]]
         
         cursor.execute("SELECT * FROM suppliers ORDER BY id ASC")
         suppliers = [dict(r) for r in cursor.fetchall()]
@@ -441,7 +464,7 @@ def adjust_inventory(req: InventoryUpdateRequest):
             cursor.execute("""
             UPDATE inventory 
             SET stock_consumed = stock_consumed + ?,
-                stock_available = stock_available - ?,
+                stock_available = MAX(0, stock_available - ?),
                 last_updated = CURRENT_TIMESTAMP
             WHERE id = ?
             """, (req.quantity, req.quantity, req.item_id))
@@ -453,12 +476,75 @@ def adjust_inventory(req: InventoryUpdateRequest):
 
         return {"success": True, "message": "Inventory updated successfully"}
 
+def _clean_item(req: InventoryItemRequest) -> dict:
+    data = req.dict()
+    for key in ("item_code", "item_name", "category", "unit", "supplier_name"):
+        data[key] = (data.get(key) or "").strip()
+    data["item_code"] = data["item_code"].upper()
+    if not data["item_code"] or not data["item_name"] or not data["unit"]:
+        raise HTTPException(status_code=400, detail="Item code, name and unit are required")
+    for key in ("opening_stock", "stock_available", "stock_consumed", "min_stock_threshold", "unit_cost"):
+        if data[key] < 0:
+            raise HTTPException(status_code=400, detail="Numbers cannot be negative")
+    return data
+
+@router.post("/inventory/items")
+def create_inventory_item(req: InventoryItemRequest, request: Request):
+    d = _clean_item(req)
+    with get_db() as conn:
+        if conn.execute("SELECT id FROM inventory WHERE item_code = ?", (d["item_code"],)).fetchone():
+            raise HTTPException(status_code=400, detail="An item with this code already exists")
+        cur = conn.execute("""
+        INSERT INTO inventory (item_code, item_name, category, unit, opening_stock, stock_received,
+            stock_consumed, stock_available, min_stock_threshold, unit_cost, supplier_name)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+        """, (d["item_code"], d["item_name"], d["category"], d["unit"], d["opening_stock"],
+              d["stock_consumed"], d["stock_available"], d["min_stock_threshold"], d["unit_cost"], d["supplier_name"]))
+        conn.execute("""INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
+            VALUES (?, 'INVENTORY_ITEM_ADDED', 'Inventory', ?, ?)""",
+            (request.state.user["username"], d["item_code"], f"Added {d['item_name']}"))
+        return {"success": True, "id": cur.lastrowid}
+
+@router.put("/inventory/items/{item_id}")
+def update_inventory_item(item_id: int, req: InventoryItemRequest, request: Request):
+    d = _clean_item(req)
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM inventory WHERE id = ?", (item_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Item not found")
+        if conn.execute("SELECT id FROM inventory WHERE item_code = ? AND id != ?", (d["item_code"], item_id)).fetchone():
+            raise HTTPException(status_code=400, detail="Another item already uses this code")
+        conn.execute("""
+        UPDATE inventory SET item_code = ?, item_name = ?, category = ?, unit = ?, opening_stock = ?,
+            stock_consumed = ?, stock_available = ?, min_stock_threshold = ?, unit_cost = ?,
+            supplier_name = ?, supplier_id = NULL, last_updated = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """, (d["item_code"], d["item_name"], d["category"], d["unit"], d["opening_stock"], d["stock_consumed"],
+              d["stock_available"], d["min_stock_threshold"], d["unit_cost"], d["supplier_name"], item_id))
+        conn.execute("""INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
+            VALUES (?, 'INVENTORY_ITEM_EDITED', 'Inventory', ?, ?)""",
+            (request.state.user["username"], d["item_code"], f"Stock {d['stock_available']} {d['unit']}"))
+        return {"success": True}
+
+@router.delete("/inventory/items/{item_id}")
+def delete_inventory_item(item_id: int, request: Request):
+    with get_db() as conn:
+        row = conn.execute("SELECT item_code FROM inventory WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        conn.execute("UPDATE purchase_records SET item_id = NULL WHERE item_id = ?", (item_id,))
+        conn.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+        conn.execute("""INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
+            VALUES (?, 'INVENTORY_ITEM_DELETED', 'Inventory', ?, 'Deleted')""",
+            (request.state.user["username"], row["item_code"]))
+        return {"success": True}
+
 # ----------------- 5. CRM & CUSTOMERS -----------------
 @router.get("/crm/customers")
 def get_customers(segment: Optional[str] = None, search: Optional[str] = None):
     with get_db() as conn:
         cursor = conn.cursor()
-        query = "SELECT * FROM customers WHERE 1=1"
+        # Customers appear in the CRM once they have placed an order
+        query = "SELECT * FROM customers WHERE COALESCE(total_orders, 0) > 0"
         params = []
         if segment:
             if segment == "Restaurant":
@@ -476,7 +562,7 @@ def get_customers(segment: Optional[str] = None, search: Optional[str] = None):
         customers = [dict(r) for r in cursor.fetchall()]
 
         # Segment distribution summary
-        cursor.execute("SELECT status, COUNT(*) as count FROM customers GROUP BY status")
+        cursor.execute("SELECT status, COUNT(*) as count FROM customers WHERE COALESCE(total_orders, 0) > 0 GROUP BY status")
         segments_summary = [dict(r) for r in cursor.fetchall()]
 
         return {"customers": customers, "segments_summary": segments_summary}
@@ -486,7 +572,7 @@ def get_customers(segment: Optional[str] = None, search: Optional[str] = None):
 def get_b2b_summary():
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM customers WHERE customer_type IN ('Hotel', 'Restaurant', 'Cafe')")
+        cursor.execute("SELECT * FROM customers WHERE customer_type IN ('Hotel', 'Restaurant', 'Cafe') AND COALESCE(status, '') != 'Removed' ORDER BY name")
         b2b_clients = [dict(r) for r in cursor.fetchall()]
 
         cursor.execute("""
@@ -514,14 +600,101 @@ def get_b2b_summary():
             "wholesale_catalog": wholesale_catalog
         }
 
+def _clean_chef(req: ChefAccountRequest) -> dict:
+    d = req.dict()
+    d["name"] = (d["name"] or "").strip()
+    phone = normalize_phone(d["phone"])
+    if not d["name"]:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not phone:
+        raise HTTPException(status_code=400, detail="Enter a valid 10-digit Indian mobile number")
+    d["phone"] = phone
+    if d["customer_type"] not in ("Hotel", "Restaurant", "Cafe"):
+        d["customer_type"] = "Restaurant"
+    if d["credit_terms"] not in ("Net 15", "Net 30", "Prepaid"):
+        d["credit_terms"] = "Net 15"
+    for key in ("email", "address", "locality", "pincode"):
+        d[key] = (d.get(key) or "").strip()
+    return d
+
+@router.post("/b2b/chefs")
+def add_chef_account(req: ChefAccountRequest, request: Request):
+    d = _clean_chef(req)
+    with get_db() as conn:
+        existing = find_customer_by_phone(conn, d["phone"])
+        if existing and existing["customer_type"] in ("Hotel", "Restaurant", "Cafe") and existing.get("status") != "Removed":
+            raise HTTPException(status_code=400, detail="A chef account with this phone number already exists")
+        if existing:
+            # Phone already used by a retail customer or a removed chef: turn it into this chef account
+            conn.execute("""UPDATE customers SET name = ?, phone = ?, email = ?, address = ?, locality = ?, pincode = ?,
+                customer_type = ?, credit_terms = ?, status = 'Restaurant' WHERE id = ?""",
+                (d["name"], d["phone"], d["email"], d["address"], d["locality"], d["pincode"],
+                 d["customer_type"], d["credit_terms"], existing["id"]))
+            chef_id = existing["id"]
+        else:
+            cur = conn.execute("""INSERT INTO customers (name, phone, email, address, locality, pincode,
+                customer_type, credit_terms, total_orders, lifetime_value, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'Restaurant')""",
+                (d["name"], d["phone"], d["email"], d["address"], d["locality"], d["pincode"],
+                 d["customer_type"], d["credit_terms"]))
+            chef_id = cur.lastrowid
+        conn.execute("""INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
+            VALUES (?, 'CHEF_ADDED', 'Customer', ?, ?)""", (request.state.user["username"], str(chef_id), d["name"]))
+        return {"success": True, "id": chef_id}
+
+@router.put("/b2b/chefs/{chef_id}")
+def update_chef_account(chef_id: int, req: ChefAccountRequest, request: Request):
+    d = _clean_chef(req)
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM customers WHERE id = ? AND customer_type IN ('Hotel', 'Restaurant', 'Cafe')", (chef_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chef account not found")
+        other = find_customer_by_phone(conn, d["phone"])
+        if other and other["id"] != chef_id:
+            raise HTTPException(status_code=400, detail="Another customer already uses this phone number")
+        conn.execute("""UPDATE customers SET name = ?, phone = ?, email = ?, address = ?, locality = ?, pincode = ?,
+            customer_type = ?, credit_terms = ? WHERE id = ?""",
+            (d["name"], d["phone"], d["email"], d["address"], d["locality"], d["pincode"],
+             d["customer_type"], d["credit_terms"], chef_id))
+        return {"success": True}
+
+@router.delete("/b2b/chefs/{chef_id}")
+def remove_chef_account(chef_id: int, request: Request):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM customers WHERE id = ? AND customer_type IN ('Hotel', 'Restaurant', 'Cafe')", (chef_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chef account not found")
+        has_orders = conn.execute("SELECT 1 FROM orders WHERE customer_id = ? LIMIT 1", (chef_id,)).fetchone()
+        if has_orders:
+            # Keep their order history; just stop them ordering as a chef
+            conn.execute("UPDATE customers SET status = 'Removed' WHERE id = ?", (chef_id,))
+        else:
+            conn.execute("DELETE FROM customers WHERE id = ?", (chef_id,))
+        conn.execute("""INSERT INTO audit_logs (user_id, action, entity_type, entity_id, change_summary)
+            VALUES (?, 'CHEF_REMOVED', 'Customer', ?, ?)""", (request.state.user["username"], str(chef_id), row["name"]))
+        return {"success": True}
+
+def wholesale_catalog(conn):
+    return [dict(r) for r in conn.execute("""
+        SELECT p.name, v.weight_label, v.price as retail_price, v.b2b_price as wholesale_price,
+               round(((v.price - v.b2b_price) / v.price) * 100, 1) as savings_pct
+        FROM product_variants v
+        JOIN products p ON v.product_id = p.id
+        WHERE v.weight_grams >= 250
+        ORDER BY p.id, v.weight_grams
+        """).fetchall()]
+
 @router.post("/b2b/orders")
 def create_b2b_order(req: B2BOrderCreateRequest):
+    return place_b2b_order(req)
+
+def place_b2b_order(req: B2BOrderCreateRequest):
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM customers WHERE id = ?", (req.customer_id,))
+        cursor.execute("SELECT * FROM customers WHERE id = ? AND customer_type IN ('Hotel', 'Restaurant', 'Cafe') AND COALESCE(status, '') != 'Removed'", (req.customer_id,))
         client = cursor.fetchone()
         if not client:
-            raise HTTPException(status_code=404, detail="B2B client not found")
+            raise HTTPException(status_code=404, detail="Chef account not found")
 
         subtotal = 0.0
         items_detail = []

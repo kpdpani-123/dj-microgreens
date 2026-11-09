@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import random
 
 from app.database import get_db
+from app.customer_auth import current_customer, otp_enabled, find_customer_by_phone, normalize_phone, site_url
 
 router = APIRouter(prefix="/api", tags=["Customer API"])
 
@@ -259,12 +260,18 @@ def calculate_cart(req: CartCalculateRequest):
 
 # ----------------- CHECKOUT & ORDERS -----------------
 @router.post("/orders")
-def create_order(req: OrderCreateRequest):
+def create_order(req: OrderCreateRequest, request: Request):
     if not req.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 
     with get_db() as conn:
         cursor = conn.cursor()
+        signed_in = current_customer(request, conn)
+        if otp_enabled() and not signed_in:
+            raise HTTPException(status_code=401, detail="Please sign in with your phone number to order")
+        if signed_in:
+            # The signed-in account decides who the order belongs to
+            req.customer_phone = signed_in["phone"]
         
         # 1. Calculate pricing
         subtotal = 0.0
@@ -312,11 +319,31 @@ def create_order(req: OrderCreateRequest):
         total_amount = round(taxable_amount + gst + delivery_fee, 2)
 
         # 2. Get or create customer
-        cursor.execute("SELECT id, total_orders, lifetime_value FROM customers WHERE phone = ?", (req.customer_phone.strip(),))
-        cust = cursor.fetchone()
         today_str = datetime.now().strftime("%Y-%m-%d")
+        if signed_in:
+            cust = signed_in
+        else:
+            cust = find_customer_by_phone(conn, req.customer_phone) if normalize_phone(req.customer_phone) else None
+            if not cust:
+                cursor.execute("SELECT id, total_orders, lifetime_value FROM customers WHERE phone = ?", (req.customer_phone.strip(),))
+                cust = cursor.fetchone()
 
-        if cust:
+        if signed_in:
+            customer_id = cust["id"]
+            cursor.execute("""
+            UPDATE customers
+            SET total_orders = total_orders + 1,
+                lifetime_value = lifetime_value + ?,
+                last_order_date = ?,
+                name = CASE WHEN COALESCE(name, '') = '' THEN ? ELSE name END,
+                email = CASE WHEN COALESCE(email, '') = '' THEN ? ELSE email END,
+                address = CASE WHEN COALESCE(address, '') = '' THEN ? ELSE address END,
+                locality = CASE WHEN COALESCE(locality, '') = '' THEN ? ELSE locality END,
+                pincode = CASE WHEN COALESCE(pincode, '') = '' THEN ? ELSE pincode END
+            WHERE id = ?
+            """, (total_amount, today_str, req.customer_name, req.customer_email or "", req.shipping_address,
+                  req.shipping_locality or "", req.shipping_pincode, customer_id))
+        elif cust:
             customer_id = cust["id"]
             cursor.execute("""
             UPDATE customers 
@@ -331,7 +358,7 @@ def create_order(req: OrderCreateRequest):
             cursor.execute("""
             INSERT INTO customers (name, phone, email, address, locality, pincode, total_orders, lifetime_value, last_order_date)
             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-            """, (req.customer_name, req.customer_phone.strip(), req.customer_email, req.shipping_address, req.shipping_locality, req.shipping_pincode, total_amount, today_str))
+            """, (req.customer_name, normalize_phone(req.customer_phone) or req.customer_phone.strip(), req.customer_email, req.shipping_address, req.shipping_locality, req.shipping_pincode, total_amount, today_str))
             customer_id = cursor.lastrowid
 
         # GPS delivery spot (only keep sensible coordinates)
@@ -352,7 +379,7 @@ def create_order(req: OrderCreateRequest):
         # Link to active batch
         cursor.execute("SELECT batch_code FROM cultivation_batches WHERE status = 'Active' ORDER BY id ASC LIMIT 1")
         batch = cursor.fetchone()
-        batch_id = batch["batch_code"] if batch else "DJ-BAT-2026-081"
+        batch_id = batch["batch_code"] if batch else None
 
         # 11 Stages Timeline Initialization
         now_time = datetime.now().strftime("%I:%M %p")
@@ -401,7 +428,7 @@ def create_order(req: OrderCreateRequest):
             """, (order_id, it["product_id"], it["variant_id"], it["name"], it["weight_label"], it["unit_price"], it["quantity"], it["total_price"]))
 
         # Notification & WhatsApp Simulation
-        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}{map_line}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: http://localhost:8000/?track={order_number}\n\nQuestions? WhatsApp us at +91 99407 65140."
+        wa_message = f"🌱 *DJ Microgreens Order Confirmed!*\n\nHi {req.customer_name},\nOrder *#{order_number}* for ₹{total_amount:.2f} is confirmed!\n\n📅 Delivery: {req.delivery_date} ({req.delivery_slot})\n📍 Address: {req.shipping_address}, Chennai - {req.shipping_pincode}{map_line}\n\nOur team in Guindy farm will harvest your microgreens fresh on the morning of delivery.\n\nTrack order: {site_url(request)}/?track={order_number}\n\nQuestions? WhatsApp us at +91 99407 65140."
         cursor.execute("""
         INSERT INTO notifications (user_type, recipient_phone, recipient_email, notification_type, channel, title, message, status)
         VALUES ('Customer', ?, ?, 'Order Confirmation', 'WhatsApp', ?, ?, 'Delivered')
@@ -447,48 +474,17 @@ def track_order(order_number: str):
         return order_dict
 
 # ----------------- CUSTOMER ORDERS & SUBSCRIPTIONS -----------------
-@router.get("/customer/orders")
-def get_customer_orders(phone: str = Query(...)):
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT o.* FROM orders o
-        JOIN customers c ON o.customer_id = c.id
-        WHERE c.phone = ? OR o.customer_phone = ?
-        ORDER BY o.id DESC
-        """, (phone.strip(), phone.strip()))
-        orders = [dict(r) for r in cursor.fetchall()]
-        for o in orders:
-            if o["tracking_timeline"]:
-                try:
-                    o["tracking_timeline"] = json.loads(o["tracking_timeline"])
-                except:
-                    pass
-            cursor.execute("SELECT * FROM order_items WHERE order_id = ?", (o["id"],))
-            o["items"] = [dict(r) for r in cursor.fetchall()]
-        return orders
-
-@router.get("/customer/subscriptions")
-def get_customer_subscriptions(phone: str = Query(...)):
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT s.* FROM subscriptions s
-        WHERE s.customer_phone = ?
-        ORDER BY s.id DESC
-        """, (phone.strip(),))
-        subs = [dict(r) for r in cursor.fetchall()]
-        for s in subs:
-            try:
-                s["products_json"] = json.loads(s["products_json"])
-            except:
-                pass
-        return subs
+# Customer orders and subscriptions are now under /api/account (signed-in customers only)
 
 @router.post("/subscriptions")
-def create_subscription(req: SubscriptionCreateRequest):
+def create_subscription(req: SubscriptionCreateRequest, request: Request):
     with get_db() as conn:
         cursor = conn.cursor()
+        signed_in = current_customer(request, conn)
+        if otp_enabled() and not signed_in:
+            raise HTTPException(status_code=401, detail="Please sign in with your phone number to subscribe")
+        if signed_in:
+            req.customer_phone = signed_in["phone"]
         today = datetime.now()
         today_str = today.strftime("%Y-%m-%d")
 
@@ -497,8 +493,11 @@ def create_subscription(req: SubscriptionCreateRequest):
         total_price = sum(item.get("price", 250) * item.get("qty", 1) for item in req.products)
 
         # Get/create customer
-        cursor.execute("SELECT id FROM customers WHERE phone = ?", (req.customer_phone.strip(),))
-        cust = cursor.fetchone()
+        if signed_in:
+            cust = signed_in
+        else:
+            cursor.execute("SELECT id FROM customers WHERE phone = ?", (req.customer_phone.strip(),))
+            cust = cursor.fetchone()
         if cust:
             customer_id = cust["id"]
         else:
@@ -531,13 +530,16 @@ def create_subscription(req: SubscriptionCreateRequest):
         return {"success": True, "subscription_id": sub_id, "message": "Subscription started successfully!"}
 
 @router.post("/subscriptions/{sub_id}/toggle-status")
-def toggle_subscription_status(sub_id: int, action: str = Query(...)):
+def toggle_subscription_status(sub_id: int, request: Request, action: str = Query(...)):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM subscriptions WHERE id = ?", (sub_id,))
         sub = cursor.fetchone()
         if not sub:
             raise HTTPException(status_code=404, detail="Subscription not found")
+        signed_in = current_customer(request, conn)
+        if otp_enabled() and (not signed_in or signed_in["id"] != sub["customer_id"]):
+            raise HTTPException(status_code=403, detail="Please sign in to manage your subscription")
 
         today_str = datetime.now().strftime("%Y-%m-%d")
         if action == "pause":

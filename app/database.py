@@ -542,3 +542,34 @@ def init_db():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
+
+        # 21. App settings (signing key, one-time cleanup flags)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """)
+
+        # 22. Customer OTP requests (phone login)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS otp_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            verified INTEGER DEFAULT 0
+        );
+        """)
+
+        # Columns added after the first release
+        _add_missing_columns(cursor, "inventory", {"supplier_name": "TEXT"})
+        _add_missing_columns(cursor, "customers", {"credit_terms": "TEXT DEFAULT 'Net 15'"})
+
+
+def _add_missing_columns(cursor, table, columns):
+    existing = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+    for name, sql_type in columns.items():
+        if name not in existing:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
